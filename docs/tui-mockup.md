@@ -136,8 +136,42 @@ never shifts the list sideways.
     reported by: me #Unresolved
 
 
-  enter open · f pin/unpin · s query YouTrack · / search list · r reload · ? help · q quit
+  enter open · f pin/unpin · w watch/unwatch · s query YouTrack · / search list · ? help · q quit
 ```
+
+## 1c — Watching
+
+`w` polls a filter in the background. The row carries a `watching` badge, the
+header counts them, and a poll that fails turns the count orange rather than
+raising a modal over whatever is on screen.
+
+```
+ youtrack-bar  acme  watching 1                                        pick a filter
+────────────────────────────────────────────────────────────────────────────────────
+   Filters                                                                  5 items
+
+  ★ Sprint 42 — backend  watching
+    project: PAY Sprint: {Sprint 42} #Unresolved
+
+    My open issues
+    for: me #Unresolved
+```
+
+An issue that turns up in a watched filter raises one notification per filter
+per poll, and is marked `●` in the list until it is opened:
+
+```
+   Issues                                                                  3 issues
+
+▌ ● PAY-1421  Checkout retries duplicate the charge
+    In Progress · Critical · Ana Souza · updated 2m
+
+    PAY-1388  Cache invalidation misses on blue/green deploy
+    Open · Major · Bruno Lima · updated 1d
+```
+
+The marker sits in the same two-column gutter the star uses on the filters
+screen, so an arrival never shifts the rows around it.
 
 ## 1b — Raw query
 

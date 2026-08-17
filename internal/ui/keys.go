@@ -10,6 +10,7 @@ type keyMap struct {
 	Filter   key.Binding
 	Search   key.Binding
 	Favorite key.Binding
+	Watch    key.Binding
 	Browser  key.Binding
 	More     key.Binding
 	Scroll   key.Binding
@@ -36,6 +37,7 @@ func defaultKeys() keyMap {
 		Filter:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search list")),
 		Search:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "query YouTrack")),
 		Favorite: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "pin/unpin")),
+		Watch:    key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "watch/unwatch")),
 		Browser:  key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in YouTrack")),
 		// Disabled until a full page comes back, which also hides it from help.
 		More:   key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "load more"), key.WithDisabled()),
@@ -61,7 +63,7 @@ func (s screenKeys) ShortHelp() []key.Binding {
 	case screenIssues:
 		return []key.Binding{s.k.Open, s.k.Browser, s.k.More, s.k.Search, s.k.Filter, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
 	default:
-		return []key.Binding{s.k.Open, s.k.Favorite, s.k.Search, s.k.Filter, s.k.Reload, s.k.Provider, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Open, s.k.Favorite, s.k.Watch, s.k.Search, s.k.Filter, s.k.Reload, s.k.Help, s.k.Quit}
 	}
 }
 
@@ -71,7 +73,7 @@ func (s screenKeys) FullHelp() [][]key.Binding {
 	}
 	return [][]key.Binding{
 		{s.k.Open, s.k.Browser, s.k.Back, s.k.Scroll},
-		{s.k.Search, s.k.Filter, s.k.Favorite, s.k.More, s.k.Reload, s.k.Provider},
+		{s.k.Search, s.k.Filter, s.k.Favorite, s.k.Watch, s.k.More, s.k.Reload, s.k.Provider},
 		{s.k.Help, s.k.Quit},
 	}
 }
