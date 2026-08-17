@@ -1,0 +1,74 @@
+version: "3"
+
+vars:
+  BIN: bin/youtrack-bar
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds: [task --list]
+    silent: true
+
+  build:
+    desc: Build the binary into bin/
+    sources: ["**/*.go", go.mod, go.sum]
+    generates: ["{{.BIN}}"]
+    cmds:
+      - go build -o {{.BIN}} .
+
+  run:
+    desc: "Run the TUI — task run -- -provider acme"
+    deps: [build]
+    # interactive is mandatory here: without it task buffers stdio and the TUI
+    # gets no raw terminal.
+    interactive: true
+    silent: true
+    cmds:
+      - "{{.BIN}} {{.CLI_ARGS}}"
+
+  test:
+    desc: Run tests with the race detector
+    cmds:
+      - go test -race ./...
+
+  cover:
+    desc: Test coverage summary
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out | tail -1
+
+  lint:
+    desc: gofmt check, go vet, golangci-lint
+    preconditions:
+      - sh: command -v golangci-lint
+        msg: golangci-lint is not installed — https://golangci-lint.run/welcome/install/
+    cmds:
+      - test -z "$(gofmt -l .)" || { echo "not gofmt'd:"; gofmt -l .; exit 1; }
+      - go vet ./...
+      - golangci-lint run
+
+  fmt:
+    desc: Format every Go file in place
+    cmds:
+      - gofmt -w .
+
+  tidy:
+    desc: Prune and sync go.mod / go.sum
+    cmds:
+      - go mod tidy
+
+  check:
+    desc: What CI runs — lint then test
+    cmds:
+      - task: lint
+      - task: test
+
+  install:
+    desc: Install youtrack-bar into GOBIN
+    cmds:
+      - go install .
+
+  clean:
+    desc: Remove build and coverage artifacts
+    cmds:
+      - rm -rf bin coverage.out
