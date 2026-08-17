@@ -5,6 +5,12 @@
 
 page_size: 50 # issues fetched per request; `m` loads the next page
 
+# How often watched filters are polled for new issues. Minimum 30s.
+watch_interval: 2m
+# Command used to put a notification on screen: zenity (default), notify-send,
+# or none to stay quiet.
+notifier: zenity
+
 providers:
   - name: acme
     url: https://acme.youtrack.cloud
@@ -19,6 +25,12 @@ providers:
     # filters use a `builtin:` prefix.
     favorites:
       - builtin:my-open-issues
+      - 145-3
+    # Saved-search IDs to poll in the background. An issue that appears in one
+    # of these raises a desktop notification and is marked in the list until
+    # you open it. Read, never written: `w` in the app changes the watch list
+    # for that session only, and nothing about it survives a restart.
+    watch:
       - 145-3
 
   - name: internal

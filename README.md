@@ -74,6 +74,28 @@ youtrack-bar -provider acme        # a specific one
 youtrack-bar -config ./config.yml  # a specific config file
 ```
 
+## Watching filters
+
+`w` on a filter polls it in the background. Watched filters carry a `◉` in the
+gutter next to the `★` for pinned ones, and the header shows `◉ watching N`.
+When an issue turns up that was not there before, you get a desktop
+notification and the issue is marked `●` in the list until you open it.
+
+```yaml
+watch_interval: 2m     # minimum 30s
+notifier: zenity       # or notify-send, or none
+
+providers:
+  - name: acme
+    watch:
+      - 145-3
+```
+
+The first poll of a filter only seeds — starting the program never announces
+issues that were already there. Nothing about watching is persisted: `watch:`
+seeds the session, `w` changes it for that session only, and a restart starts
+over. Only the active provider is polled.
+
 ## Develop
 
 [Task](https://taskfile.dev) drives everything; run `task` for the full list.
@@ -95,6 +117,7 @@ task cover                    # coverage summary
 | `m`      | load the next page of issues              |
 | `s`      | type a raw YouTrack query                 |
 | `f`      | pin/unpin the selected filter (favourite) |
+| `w`      | watch/unwatch the selected filter         |
 | `/`      | fuzzy-search the current list             |
 | `r`      | reload the current screen                 |
 | `p`      | switch to the next provider               |

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -74,6 +75,13 @@ type Model struct {
 	current  *youtrack.Issue
 	comments []youtrack.Comment
 
+	// watch is the background poller for filters the user is monitoring, and
+	// watchGen retires the tick chain when the provider changes or the watch
+	// list is toggled — otherwise every toggle would leave another ticker
+	// running alongside the first.
+	watch    watcher
+	watchGen int
+
 	// gen invalidates in-flight responses after a provider switch or reload,
 	// so a slow answer from the old instance never lands on the new one.
 	gen     int
@@ -134,6 +142,9 @@ func (m *Model) setProvider(i int) error {
 		return fmt.Errorf("provider %q: %w", p.Name, err)
 	}
 	m.provider, m.client = i, c
+	// Watched filters, what has been seen and what is still marked new are all
+	// per-instance, so switching starts over rather than carrying state across.
+	m.watch = newWatcher(p.Watch)
 	return nil
 }
 
@@ -195,7 +206,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.savedQueries = msg.queries
 		m.migrateFavorites()
-		return m, m.setFilterItems()
+		// The watch list resolves IDs against these, so the poller can only
+		// start once they have arrived.
+		return m, tea.Batch(m.setFilterItems(), m.startWatch())
 
 	case issuesMsg:
 		if msg.gen != m.gen {
@@ -228,6 +241,39 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.current, m.comments = msg.issue, msg.comments
 		m.renderDetail()
 		m.detail.GotoTop()
+		// Reading it is what makes it no longer new.
+		delete(m.watch.fresh, msg.issue.ID)
+		return m, m.refreshIssueMarks()
+
+	case watchTickMsg:
+		if msg.gen != m.watchGen {
+			return m, nil
+		}
+		return m, tea.Batch(m.pollWatched(), m.tickWatch())
+
+	case watchResultMsg:
+		if msg.gen != m.watchGen {
+			return m, nil
+		}
+		if msg.err != nil {
+			// A background poll must not throw a modal over what the user is
+			// doing; the header carries a badge until the next poll works.
+			m.watch.failed = true
+			return m, nil
+		}
+		m.watch.failed = false
+		fresh := m.watch.record(msg.filterID, msg.issues)
+		if len(fresh) == 0 {
+			return m, nil
+		}
+		return m, tea.Batch(m.refreshIssueMarks(),
+			notifyNew(m.cfg.Notifier, msg.label, fresh))
+
+	case notifiedMsg:
+		if msg.err != nil {
+			m.dlg = infoDialog("Notification failed", msg.err.Error()+
+				"\n\nSet `notifier` in the config to notify-send, or to none to stop trying.")
+		}
 		return m, nil
 
 	case openedMsg:
@@ -315,6 +361,12 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.toggleFavorite()
+
+	case key.Matches(msg, m.keys.Watch):
+		if m.screen != screenFilters {
+			return m, nil
+		}
+		return m, m.toggleWatch()
 
 	case key.Matches(msg, m.keys.Browser):
 		if id := m.selectedIssueID(); id != "" {
@@ -431,7 +483,11 @@ func (m *Model) setFilterItems() tea.Cmd {
 
 	items := make([]list.Item, 0, len(sorted))
 	for _, q := range sorted {
-		items = append(items, filterItem{SavedQuery: q, fav: rank(q.ID) < len(fav)})
+		items = append(items, filterItem{
+			SavedQuery: q,
+			fav:        rank(q.ID) < len(fav),
+			watched:    m.watch.watching[q.ID],
+		})
 	}
 	return m.filters.SetItems(items)
 }
@@ -463,9 +519,75 @@ func (m *Model) setIssueItems() tea.Cmd {
 	fields := m.cfg.Providers[m.provider].ListFields
 	items := make([]list.Item, 0, len(m.allIssues))
 	for _, iss := range m.allIssues {
-		items = append(items, issueItem{issue: iss, fields: fields})
+		items = append(items, issueItem{issue: iss, fields: fields, isNew: m.watch.fresh[iss.ID]})
 	}
 	return m.issues.SetItems(items)
+}
+
+// refreshIssueMarks redraws the list so a newly arrived issue picks up its
+// marker, without disturbing where the user is.
+func (m *Model) refreshIssueMarks() tea.Cmd {
+	if len(m.allIssues) == 0 {
+		return nil
+	}
+	at := m.issues.Index()
+	cmd := m.setIssueItems()
+	m.issues.Select(at)
+	return cmd
+}
+
+// --- background watching ---------------------------------------------------
+
+// startWatch retires any running tick chain and begins a new one. The first
+// poll only seeds, so nothing is announced for issues that were already there.
+func (m *Model) startWatch() tea.Cmd {
+	m.watchGen++
+	if len(m.watch.watching) == 0 {
+		return nil
+	}
+	return tea.Batch(m.pollWatched(), m.tickWatch())
+}
+
+func (m *Model) tickWatch() tea.Cmd {
+	gen := m.watchGen
+	return tea.Tick(m.cfg.WatchEvery, func(time.Time) tea.Msg {
+		return watchTickMsg{gen: gen}
+	})
+}
+
+// pollWatched fetches every watched filter once. Watched IDs that no longer
+// resolve to a saved search are skipped rather than reported.
+func (m *Model) pollWatched() tea.Cmd {
+	c, gen, top := m.client, m.watchGen, m.cfg.PageSize
+	var cmds []tea.Cmd
+	for _, q := range m.savedQueries {
+		if !m.watch.watching[q.ID] {
+			continue
+		}
+		id, query, label := q.ID, q.Query, q.Name
+		cmds = append(cmds, func() tea.Msg {
+			issues, err := c.Issues(context.Background(), query, 0, top)
+			return watchResultMsg{gen: gen, filterID: id, label: label, issues: issues, err: err}
+		})
+	}
+	return tea.Batch(cmds...)
+}
+
+// toggleWatch starts or stops monitoring the selected filter for this session.
+// Nothing is written to the config: turning a poller on and off should not
+// rewrite a file.
+func (m *Model) toggleWatch() tea.Cmd {
+	it, ok := m.filters.SelectedItem().(filterItem)
+	if !ok {
+		return nil
+	}
+	if m.watch.watching[it.ID] {
+		delete(m.watch.watching, it.ID)
+		delete(m.watch.seen, it.ID)
+	} else {
+		m.watch.watching[it.ID] = true
+	}
+	return tea.Batch(m.setFilterItems(), m.startWatch())
 }
 
 // toggleFavorite pins or unpins the selected filter and persists it. Matching
@@ -664,6 +786,16 @@ func (m *Model) header() string {
 	if m.insecure() {
 		// A downgraded connection stays on screen for as long as it is on.
 		left += styInsecure.Render(" !insecure ")
+	}
+	if n := len(m.watch.watching); n > 0 {
+		// The glyph alone does not say what it counts, and this is the only
+		// place the ◉ in the filters gutter gets explained.
+		style, label := styWatch, fmt.Sprintf("◉ watching %d", n)
+		if m.watch.failed {
+			// A background poll cannot raise a modal, so it says so here.
+			style, label = styWatchFail, fmt.Sprintf("◉ watching %d (failed)", n)
+		}
+		left += " " + style.Render(label)
 	}
 
 	var right string

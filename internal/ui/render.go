@@ -24,6 +24,12 @@ var (
 	styHead     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
 	styAuthor   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("114"))
 	styFav      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	styNew      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
+
+	// Watching is ambient state, not an alert: a glyph in the gutter, no filled
+	// chip. The header already carries two of those for identity.
+	styWatch     = lipgloss.NewStyle().Foreground(lipgloss.Color("44"))
+	styWatchFail = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
 
 	styQueryLabel = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("62"))
@@ -58,19 +64,25 @@ func link(text, url string) string {
 
 type filterItem struct {
 	youtrack.SavedQuery
-	fav bool
+	fav     bool
+	watched bool
 }
 
-// Title keeps the two-column gutter whether or not the star is there, so
-// pinning something does not shift the whole list sideways.
+// Title reserves one gutter column per marker, always, so pinning or watching
+// something never shifts the list sideways. Repeating the word "watching" on
+// every row was louder than the names it was decorating.
 func (f filterItem) Title() string {
+	fav, watch := " ", " "
 	if f.fav {
-		return styFav.Render("★") + " " + f.Name
+		fav = styFav.Render("★")
 	}
-	return "  " + f.Name
+	if f.watched {
+		watch = styWatch.Render("◉")
+	}
+	return fav + " " + watch + " " + f.Name
 }
 
-func (f filterItem) Description() string { return "  " + f.Query }
+func (f filterItem) Description() string { return "    " + f.Query }
 func (f filterItem) FilterValue() string { return f.Name + " " + f.Query }
 
 type issueItem struct {
@@ -78,9 +90,20 @@ type issueItem struct {
 	// fields names the custom fields to show on the summary line. Empty means
 	// "the first few that have a value" — field names differ per instance.
 	fields []string
+	// isNew marks an issue a watched filter picked up since this session
+	// started, until it is opened.
+	isNew bool
 }
 
-func (i issueItem) Title() string       { return i.issue.ID + "  " + i.issue.Summary }
+// Title reserves the same two-column gutter as the filters list, so a new
+// arrival never shifts the rows around it.
+func (i issueItem) Title() string {
+	mark := "  "
+	if i.isNew {
+		mark = styNew.Render("●") + " "
+	}
+	return mark + i.issue.ID + "  " + i.issue.Summary
+}
 func (i issueItem) FilterValue() string { return i.issue.ID + " " + i.issue.Summary }
 
 func (i issueItem) Description() string {
@@ -102,7 +125,7 @@ func (i issueItem) Description() string {
 		}
 	}
 	parts = append(parts, "updated "+relTime(i.issue.Updated))
-	return strings.Join(parts, " · ")
+	return "  " + strings.Join(parts, " · ")
 }
 
 var _ list.DefaultItem = issueItem{}

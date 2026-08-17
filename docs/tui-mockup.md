@@ -136,8 +136,53 @@ never shifts the list sideways.
     reported by: me #Unresolved
 
 
-  enter open · f pin/unpin · s query YouTrack · / search list · r reload · ? help · q quit
+  enter open · f pin/unpin · w watch/unwatch · s query YouTrack · / search list · ? help · q quit
 ```
+
+## 1c — Watching
+
+`w` polls a filter in the background. Each marker gets its own gutter column —
+`★` pinned, `◉` watched — so a row never shifts when either is toggled, and the
+name is never pushed around by a badge. The header names and counts them —
+the only place the glyph gets explained — and a poll that fails turns it orange
+rather than raising a modal over what is on screen.
+
+```
+ youtrack-bar  acme  ◉ watching 2                                      pick a filter
+────────────────────────────────────────────────────────────────────────────────────
+   Filters                                                                  5 items
+
+  ★ ◉ Sprint 42 — backend
+      project: PAY Sprint: {Sprint 42} #Unresolved
+
+    ◉ Waiting on me
+      State: {Waiting for review}
+
+      My open issues
+      for: me #Unresolved
+```
+
+Failing that, the count says so and stays out of the way:
+
+```
+ youtrack-bar  acme  ◉ watching 2 (failed)                             pick a filter
+```
+
+An issue that turns up in a watched filter raises one notification per filter
+per poll, and is marked `●` in the list until it is opened:
+
+```
+   Issues                                                                  3 issues
+
+▌ ● PAY-1421  Checkout retries duplicate the charge
+    In Progress · Critical · Ana Souza · updated 2m
+
+    PAY-1388  Cache invalidation misses on blue/green deploy
+    Open · Major · Bruno Lima · updated 1d
+```
+
+The marker sits in the same two-column gutter the star uses on the filters
+screen, so an arrival never shifts the rows around it.
 
 ## 1b — Raw query
 
