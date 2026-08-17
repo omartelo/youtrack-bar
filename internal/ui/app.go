@@ -62,6 +62,11 @@ type Model struct {
 	// favouriting can re-sort without another round trip.
 	savedQueries []youtrack.SavedQuery
 
+	// allIssues accumulates across pages; it is also what the next $skip is
+	// counted from. moreIssues is false once a short page comes back.
+	allIssues  []youtrack.Issue
+	moreIssues bool
+
 	query    string
 	current  *youtrack.Issue
 	comments []youtrack.Comment
@@ -193,13 +198,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loading = false
 		m.screen = screenIssues
-		fields := m.cfg.Providers[m.provider].ListFields
-		items := make([]list.Item, 0, len(msg.issues))
-		for _, iss := range msg.issues {
-			items = append(items, issueItem{issue: iss, fields: fields})
+
+		// A short page is how YouTrack says "that was the last one" — it has no
+		// total count worth paying for.
+		m.moreIssues = len(msg.issues) == m.cfg.PageSize
+		m.keys.More.SetEnabled(m.moreIssues)
+
+		at := m.issues.Index()
+		if msg.appendTo {
+			m.allIssues = append(m.allIssues, msg.issues...)
+		} else {
+			m.allIssues, at = msg.issues, 0
 		}
-		m.issues.Select(0)
-		return m, m.issues.SetItems(items)
+		cmd := m.setIssueItems()
+		m.issues.Select(at)
+		return m, cmd
 
 	case detailMsg:
 		if msg.gen != m.gen {
@@ -275,6 +288,12 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Reload):
 		return m, m.reload()
 
+	case key.Matches(msg, m.keys.More):
+		if m.screen != screenIssues {
+			return m, nil
+		}
+		return m, m.loadMoreIssues()
+
 	case key.Matches(msg, m.keys.Favorite):
 		if m.screen != screenFilters {
 			return m, nil
@@ -306,7 +325,6 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch m.screen {
 		case screenFilters:
 			if it, ok := m.filters.SelectedItem().(filterItem); ok {
-				m.query = it.Query
 				return m, m.loadIssues(it.Query)
 			}
 		case screenIssues:
@@ -377,6 +395,16 @@ func (m *Model) setFilterItems() tea.Cmd {
 		items = append(items, filterItem{SavedQuery: q, fav: rank(q.Name) < len(fav)})
 	}
 	return m.filters.SetItems(items)
+}
+
+// setIssueItems rebuilds the issue list from every page fetched so far.
+func (m *Model) setIssueItems() tea.Cmd {
+	fields := m.cfg.Providers[m.provider].ListFields
+	items := make([]list.Item, 0, len(m.allIssues))
+	for _, iss := range m.allIssues {
+		items = append(items, issueItem{issue: iss, fields: fields})
+	}
+	return m.issues.SetItems(items)
 }
 
 // toggleFavorite pins or unpins the selected filter and persists it. Matching
@@ -605,8 +633,9 @@ type filtersMsg struct {
 }
 
 type issuesMsg struct {
-	gen    int
-	issues []youtrack.Issue
+	gen      int
+	issues   []youtrack.Issue
+	appendTo bool // a further page, not a fresh query
 }
 
 type detailMsg struct {
@@ -635,14 +664,27 @@ func (m *Model) loadFilters() tea.Cmd {
 }
 
 func (m *Model) loadIssues(query string) tea.Cmd {
+	m.query = query
+	return m.fetchIssues(query, 0, false)
+}
+
+// loadMoreIssues fetches the page after everything already on screen.
+func (m *Model) loadMoreIssues() tea.Cmd {
+	if !m.moreIssues || m.query == "" {
+		return nil
+	}
+	return m.fetchIssues(m.query, len(m.allIssues), true)
+}
+
+func (m *Model) fetchIssues(query string, skip int, appendTo bool) tea.Cmd {
 	c, gen := m.begin()
 	top := m.cfg.PageSize
 	return func() tea.Msg {
-		issues, err := c.Issues(context.Background(), query, top)
+		issues, err := c.Issues(context.Background(), query, skip, top)
 		if err != nil {
 			return errMsg{gen, err}
 		}
-		return issuesMsg{gen, issues}
+		return issuesMsg{gen, issues, appendTo}
 	}
 }
 

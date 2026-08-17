@@ -122,12 +122,14 @@ func (c *Client) SavedQueries(ctx context.Context) ([]SavedQuery, error) {
 	return out, err
 }
 
-// Issues runs a YouTrack query and returns at most top issues.
-func (c *Client) Issues(ctx context.Context, query string, top int) ([]Issue, error) {
+// Issues runs a YouTrack query and returns at most top issues, skipping the
+// first skip of them. A short page means there is nothing after it.
+func (c *Client) Issues(ctx context.Context, query string, skip, top int) ([]Issue, error) {
 	var out []Issue
 	err := c.get(ctx, "/issues", url.Values{
 		"query":  {query},
 		"fields": {fieldsIssueList},
+		"$skip":  {strconv.Itoa(skip)},
 		"$top":   {strconv.Itoa(top)},
 	}, &out)
 	return out, err
