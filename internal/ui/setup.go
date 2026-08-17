@@ -4,9 +4,16 @@ import (
 	"os"
 	"strings"
 
+	"github.com/omartelo/youtrack-bar/internal/config"
+
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 )
+
+// fieldCharLimit caps each setup field. A permanent token is ~70 characters
+// and a CA path well under that; the limit is only there so a runaway paste
+// cannot fill the terminal.
+const fieldCharLimit = 400
 
 // Fields of the first-run form.
 const (
@@ -37,6 +44,55 @@ var (
 	caEnvHints = []string{"NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"}
 )
 
+func (m *Model) setupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "esc":
+		return m, tea.Quit
+	case "tab", "down":
+		return m, m.setup.focusOn(m.setup.focus + 1)
+	case "shift+tab", "up":
+		return m, m.setup.focusOn(m.setup.focus - 1)
+	case "ctrl+r":
+		m.setup.toggleReveal()
+		return m, nil
+	case "enter":
+		if m.setup.focus != fieldCount-1 {
+			return m, m.setup.focusOn(m.setup.focus + 1)
+		}
+		return m, m.submitSetup()
+	}
+	return m, m.setup.update(msg)
+}
+
+// submitSetup validates the typed provider and then proves it against the API.
+// The file is written by the filtersMsg handler, not here.
+func (m *Model) submitSetup() tea.Cmd {
+	typed := config.Provider{
+		Name:   m.setup.value(fieldName),
+		URL:    m.setup.value(fieldURL),
+		Token:  m.setup.value(fieldToken),
+		CAFile: m.setup.value(fieldCA),
+	}
+
+	// Validate expands ${VARS} in place but stashes what was typed in
+	// Provider.RawToken / RawCAFile, and config.Save writes those back — that
+	// is what keeps a reference from being persisted as the secret it resolved
+	// to. See the token invariant in CLAUDE.md.
+	live := &config.Config{Providers: []config.Provider{typed}}
+	if err := live.Validate(); err != nil {
+		m.dlg = infoDialog("Check the form", err.Error())
+		return nil
+	}
+
+	m.cfg = live
+	m.savePending = true
+	if err := m.setProvider(0); err != nil {
+		m.dlg = errorDialog(err)
+		return nil
+	}
+	return m.loadFilters()
+}
+
 // setupForm is the first-run configuration screen: three inputs, no wizard.
 type setupForm struct {
 	inputs [fieldCount]textinput.Model
@@ -49,7 +105,7 @@ func newSetupForm(path string) setupForm {
 	for i := range f.inputs {
 		in := textinput.New()
 		in.Prompt = ""
-		in.CharLimit = 400
+		in.CharLimit = fieldCharLimit
 		in.Placeholder = setupPlaceholders[i]
 		f.inputs[i] = in
 	}

@@ -26,6 +26,7 @@ internal/ui/query.go         raw-query prompt (`s`)
 internal/ui/dialog.go        modal error popup and the layer overlay
 internal/ui/browser.go       handing a URL to the desktop (`o`)
 internal/ui/notify.go        background watcher and the notification command
+internal/ui/requests.go      every call to a YouTrack instance and its messages
 internal/ui/render.go        styles, list items, issue detail composition
 internal/ui/keys.go          key bindings and per-screen help
 docs/tui-mockup.md           reference layout for every screen
@@ -199,6 +200,12 @@ of them needs "fixing" before somebody actually complains.
 - **Only the active provider is polled.** Switching providers resets the
   watcher — what was seen, what was marked and what was being watched. *Upgrade:*
   a client and watcher per provider, which means keeping them all alive.
+
+- **A watched issue is announced once, ever.** `watcher.seen` only grows within
+  a session, so an issue that leaves a filter and comes back — resolved, then
+  reopened — never notifies again. That is also what keeps a filter whose order
+  churns from re-announcing the same issues. *Upgrade:* age entries out of
+  `seen`, which trades the quiet for a second notification on every flap.
 
 - **The notification is fire-and-forget.** No click-to-open, no grouping across
   filters, no rate limit beyond `watch_interval`. Two watched filters gaining

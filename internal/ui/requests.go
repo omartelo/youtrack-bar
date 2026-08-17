@@ -1,0 +1,94 @@
+// Requests: every call that talks to a YouTrack instance, and the messages
+// they answer with. Kept apart from the state machine so the invariant is easy
+// to check — a command here never reads Model, it is handed what it needs.
+package ui
+
+import (
+	"context"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/omartelo/youtrack-bar/internal/youtrack"
+)
+
+type errMsg struct {
+	gen int
+	err error
+}
+
+type filtersMsg struct {
+	gen     int
+	queries []youtrack.SavedQuery
+}
+
+type issuesMsg struct {
+	gen      int
+	issues   []youtrack.Issue
+	appendTo bool // a further page, not a fresh query
+}
+
+type detailMsg struct {
+	gen      int
+	issue    *youtrack.Issue
+	comments []youtrack.Comment
+}
+
+// begin marks a new request generation and returns the values a command needs
+// to be self-contained (invariant: no I/O reads Model state).
+func (m *Model) begin() (*youtrack.Client, int) {
+	m.gen++
+	m.loading, m.dlg = true, nil
+	return m.client, m.gen
+}
+
+func (m *Model) loadFilters() tea.Cmd {
+	c, gen := m.begin()
+	return func() tea.Msg {
+		saved, err := c.SavedQueries(context.Background())
+		if err != nil {
+			return errMsg{gen, err}
+		}
+		return filtersMsg{gen, append(append([]youtrack.SavedQuery(nil), builtinFilters...), saved...)}
+	}
+}
+
+func (m *Model) loadIssues(query string) tea.Cmd {
+	m.query = query
+	return m.fetchIssues(query, 0, false)
+}
+
+// loadMoreIssues fetches the page after everything already on screen.
+func (m *Model) loadMoreIssues() tea.Cmd {
+	if !m.moreIssues || m.query == "" {
+		return nil
+	}
+	return m.fetchIssues(m.query, len(m.allIssues), true)
+}
+
+func (m *Model) fetchIssues(query string, skip int, appendTo bool) tea.Cmd {
+	c, gen := m.begin()
+	top := m.cfg.PageSize
+	return func() tea.Msg {
+		issues, err := c.Issues(context.Background(), query, skip, top)
+		if err != nil {
+			return errMsg{gen, err}
+		}
+		return issuesMsg{gen, issues, appendTo}
+	}
+}
+
+func (m *Model) loadDetail(id string) tea.Cmd {
+	c, gen := m.begin()
+	return func() tea.Msg {
+		ctx := context.Background()
+		issue, err := c.Issue(ctx, id)
+		if err != nil {
+			return errMsg{gen, err}
+		}
+		comments, err := c.Comments(ctx, id)
+		if err != nil {
+			return errMsg{gen, err}
+		}
+		return detailMsg{gen, issue, comments}
+	}
+}
