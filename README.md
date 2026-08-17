@@ -92,6 +92,8 @@ task cover                    # coverage summary
 | `esc`    | back one screen                           |
 | `↑` `↓`  | move / scroll                             |
 | `o`      | open the issue in YouTrack (browser)      |
+| `m`      | load the next page of issues              |
+| `s`      | type a raw YouTrack query                 |
 | `f`      | pin/unpin the selected filter (favourite) |
 | `/`      | fuzzy-search the current list             |
 | `r`      | reload the current screen                 |
@@ -104,7 +106,8 @@ reveal the token, `ctrl+c` quit. Paste the token with your terminal's usual
 shortcut (`ctrl+shift+v`, middle-click, `cmd+v`); `ctrl+v` reads the system
 clipboard directly.
 
-`o` works from the issue list and from an open issue. Attachments and links
+`s` and `/` are different things: `s` asks YouTrack a new question, `/` narrows
+what is already on screen. `o` works from the issue list and from an open issue. Attachments and links
 still go through Ctrl+Click: mouse tracking is deliberately disabled so the
 terminal keeps handling OSC 8 hyperlinks. See `CLAUDE.md` for the full invariants and the list
 of known ceilings.

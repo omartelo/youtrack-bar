@@ -28,10 +28,12 @@ const (
 	screenDetail
 )
 
-// builtinFilters are always offered on top of the user's saved searches.
+// builtinFilters are always offered alongside the user's saved searches. Their
+// IDs are synthetic and prefixed so they can never collide with a YouTrack
+// entity ID, and they are what `favorites` records.
 var builtinFilters = []youtrack.SavedQuery{
-	{Name: "My open issues", Query: "for: me #Unresolved"},
-	{Name: "All unresolved", Query: "#Unresolved"},
+	{ID: "builtin:my-open-issues", Name: "My open issues", Query: "for: me #Unresolved"},
+	{ID: "builtin:all-unresolved", Name: "All unresolved", Query: "#Unresolved"},
 }
 
 // Model is the root program state.
@@ -192,6 +194,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenFilters
 		}
 		m.savedQueries = msg.queries
+		m.migrateFavorites()
 		return m, m.setFilterItems()
 
 	case issuesMsg:
@@ -414,8 +417,8 @@ func (m *Model) trustAnyway() tea.Cmd {
 // else keeps the order YouTrack returned.
 func (m *Model) setFilterItems() tea.Cmd {
 	fav := m.cfg.Providers[m.provider].Favorites
-	rank := func(name string) int {
-		if i := slices.Index(fav, name); i >= 0 {
+	rank := func(id string) int {
+		if i := slices.Index(fav, id); i >= 0 {
 			return i
 		}
 		return len(fav)
@@ -423,14 +426,36 @@ func (m *Model) setFilterItems() tea.Cmd {
 
 	sorted := slices.Clone(m.savedQueries)
 	slices.SortStableFunc(sorted, func(a, b youtrack.SavedQuery) int {
-		return rank(a.Name) - rank(b.Name)
+		return rank(a.ID) - rank(b.ID)
 	})
 
 	items := make([]list.Item, 0, len(sorted))
 	for _, q := range sorted {
-		items = append(items, filterItem{SavedQuery: q, fav: rank(q.Name) < len(fav)})
+		items = append(items, filterItem{SavedQuery: q, fav: rank(q.ID) < len(fav)})
 	}
 	return m.filters.SetItems(items)
+}
+
+// migrateFavorites rewrites favourites recorded as names — the original format
+// — into IDs, so that renaming a saved search in YouTrack stops losing its pin.
+// Memory only: the next `f` persists the result, and an entry that matches
+// nothing is left alone rather than dropped.
+func (m *Model) migrateFavorites() {
+	p := &m.cfg.Providers[m.provider]
+	ids := make(map[string]bool, len(m.savedQueries))
+	byName := make(map[string]string, len(m.savedQueries))
+	for _, q := range m.savedQueries {
+		ids[q.ID] = true
+		byName[q.Name] = q.ID
+	}
+	for i, f := range p.Favorites {
+		if ids[f] {
+			continue
+		}
+		if id, ok := byName[f]; ok {
+			p.Favorites[i] = id
+		}
+	}
 }
 
 // setIssueItems rebuilds the issue list from every page fetched so far.
@@ -444,18 +469,18 @@ func (m *Model) setIssueItems() tea.Cmd {
 }
 
 // toggleFavorite pins or unpins the selected filter and persists it. Matching
-// is by name because that is what the user sees; a saved search sharing a name
-// with a built-in toggles both.
+// is by ID, so renaming a saved search in YouTrack keeps its pin and two
+// searches sharing a name stay independent.
 func (m *Model) toggleFavorite() tea.Cmd {
 	it, ok := m.filters.SelectedItem().(filterItem)
 	if !ok {
 		return nil
 	}
 	p := &m.cfg.Providers[m.provider]
-	if i := slices.Index(p.Favorites, it.Name); i >= 0 {
+	if i := slices.Index(p.Favorites, it.ID); i >= 0 {
 		p.Favorites = slices.Delete(p.Favorites, i, i+1)
 	} else {
-		p.Favorites = append(p.Favorites, it.Name)
+		p.Favorites = append(p.Favorites, it.ID)
 	}
 	if err := m.saveConfig(); err != nil {
 		m.dlg = infoDialog("Config not saved", err.Error())
@@ -465,7 +490,7 @@ func (m *Model) toggleFavorite() tea.Cmd {
 	// Follow the item to its new position instead of resetting to the top:
 	// pinning moves it, the cursor should go with it.
 	for i, li := range m.filters.Items() {
-		if f, ok := li.(filterItem); ok && f.Name == it.Name {
+		if f, ok := li.(filterItem); ok && f.ID == it.ID {
 			m.filters.Select(i)
 			break
 		}

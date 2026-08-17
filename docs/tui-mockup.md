@@ -108,7 +108,8 @@ Anything else is the same box with a plain title and only `esc  dismiss`:
 
 Landing screen. Favourites first, then two built-ins, then the user's YouTrack
 saved searches in the order the API returned them. `f` pins or unpins the
-selected one and writes it to the config; `/` fuzzy-filters this list locally.
+selected one and writes its ID to the config; `/` fuzzy-filters this list
+locally; `s` skips the list entirely and asks YouTrack a question directly.
 
 The star sits in a two-column gutter every row reserves, so pinning something
 never shifts the list sideways.
@@ -135,7 +136,27 @@ never shifts the list sideways.
     reported by: me #Unresolved
 
 
-  enter open · f pin/unpin · / search list · r reload · p next provider · ? help · q quit
+  enter open · f pin/unpin · s query YouTrack · / search list · r reload · ? help · q quit
+```
+
+## 1b — Raw query
+
+`s` opens a one-line prompt above the list, seeded with the query on screen so
+an existing one can be tweaked rather than retyped. It owns the keyboard while
+open — `for: me` contains four command keys.
+
+```
+ youtrack-bar  acme                                                    pick a filter
+────────────────────────────────────────────────────────────────────────────────────
+ query  project: PAY State: Open
+
+  FILTERS
+
+  ★ Sprint 42 — backend
+    project: PAY Sprint: {Sprint 42} #Unresolved
+    …
+
+  enter  run the query  ·  esc  cancel
 ```
 
 ## 2 — Issues
@@ -163,8 +184,12 @@ instance, nothing is hardcoded.
   Waiting for review · Major · Ana Souza · updated 5d
 
 
-  enter open · o open in YouTrack · / search list · esc back · r reload · ? help · q quit
+  enter open · o open in YouTrack · m load more · s query YouTrack · / search list · esc back
 ```
+
+`m` appends the next `page_size` issues. It only shows up while a full page came
+back — once a short page arrives, the key retires rather than sitting there
+doing nothing.
 
 `o` hands the selected issue's URL to the desktop's browser. It works here and
 on the detail screen; on a machine with no handler (SSH, headless) the dialog

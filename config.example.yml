@@ -3,7 +3,7 @@
 # Never write the token in plain text here. Use ${VAR}: the value is expanded
 # from the environment when the file is loaded.
 
-page_size: 50 # issues fetched per filter (a single request, no pagination)
+page_size: 50 # issues fetched per request; `m` loads the next page
 
 providers:
   - name: acme
@@ -12,12 +12,14 @@ providers:
     # Custom fields shown on the issue list summary line. These are the field
     # names of YOUR instance. Omit to get the first three non-empty fields.
     list_fields: [State, Priority, Assignee]
-    # Filters pinned to the top of the filters screen, in this order. Usually
-    # written by pressing `f` in the app rather than by hand — YouTrack's API
-    # has no favourite flag on a saved search, so this list is ours.
+    # Saved-search IDs pinned to the top of the filters screen, in this order.
+    # Written by pressing `f` in the app rather than by hand — YouTrack's API
+    # has no favourite flag on a saved search, so this list is ours. IDs rather
+    # than names so a rename in YouTrack does not lose the pin; the built-in
+    # filters use a `builtin:` prefix.
     favorites:
-      - Sprint 42 — backend
-      - Waiting on me
+      - builtin:my-open-issues
+      - 145-3
 
   - name: internal
     url: https://youtrack.corp.local
