@@ -143,11 +143,12 @@ never shifts the list sideways.
 
 `w` polls a filter in the background. Each marker gets its own gutter column —
 `★` pinned, `◉` watched — so a row never shifts when either is toggled, and the
-name is never pushed around by a badge. The header carries the count; a poll
-that fails turns it orange rather than raising a modal over what is on screen.
+name is never pushed around by a badge. The header names and counts them —
+the only place the glyph gets explained — and a poll that fails turns it orange
+rather than raising a modal over what is on screen.
 
 ```
- youtrack-bar  acme  ◉ 2                                               pick a filter
+ youtrack-bar  acme  ◉ watching 2                                      pick a filter
 ────────────────────────────────────────────────────────────────────────────────────
    Filters                                                                  5 items
 
@@ -164,7 +165,7 @@ that fails turns it orange rather than raising a modal over what is on screen.
 Failing that, the count says so and stays out of the way:
 
 ```
- youtrack-bar  acme  ◉ 2 failed                                        pick a filter
+ youtrack-bar  acme  ◉ watching 2 (failed)                             pick a filter
 ```
 
 An issue that turns up in a watched filter raises one notification per filter

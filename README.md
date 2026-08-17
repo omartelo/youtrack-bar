@@ -77,9 +77,9 @@ youtrack-bar -config ./config.yml  # a specific config file
 ## Watching filters
 
 `w` on a filter polls it in the background. Watched filters carry a `◉` in the
-gutter next to the `★` for pinned ones, and the header counts them. When an
-issue turns up that was not there before, you get a desktop notification and
-the issue is marked `●` in the list until you open it.
+gutter next to the `★` for pinned ones, and the header shows `◉ watching N`.
+When an issue turns up that was not there before, you get a desktop
+notification and the issue is marked `●` in the list until you open it.
 
 ```yaml
 watch_interval: 2m     # minimum 30s

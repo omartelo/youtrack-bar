@@ -788,10 +788,12 @@ func (m *Model) header() string {
 		left += styInsecure.Render(" !insecure ")
 	}
 	if n := len(m.watch.watching); n > 0 {
-		style, label := styWatch, fmt.Sprintf("◉ %d", n)
+		// The glyph alone does not say what it counts, and this is the only
+		// place the ◉ in the filters gutter gets explained.
+		style, label := styWatch, fmt.Sprintf("◉ watching %d", n)
 		if m.watch.failed {
 			// A background poll cannot raise a modal, so it says so here.
-			style, label = styWatchFail, fmt.Sprintf("◉ %d failed", n)
+			style, label = styWatchFail, fmt.Sprintf("◉ watching %d (failed)", n)
 		}
 		left += " " + style.Render(label)
 	}
