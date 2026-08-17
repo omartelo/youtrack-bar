@@ -1,0 +1,34 @@
+# youtrack-bar — copy to $XDG_CONFIG_HOME/youtrack-bar/config.yml
+#
+# Never write the token in plain text here. Use ${VAR}: the value is expanded
+# from the environment when the file is loaded.
+
+page_size: 50 # issues fetched per filter (a single request, no pagination)
+
+providers:
+  - name: acme
+    url: https://acme.youtrack.cloud
+    token: ${YOUTRACK_TOKEN_ACME} # perm:xxxx.yyyy.zzzz
+    # Custom fields shown on the issue list summary line. These are the field
+    # names of YOUR instance. Omit to get the first three non-empty fields.
+    list_fields: [State, Priority, Assignee]
+    # Filters pinned to the top of the filters screen, in this order. Usually
+    # written by pressing `f` in the app rather than by hand — YouTrack's API
+    # has no favourite flag on a saved search, so this list is ours.
+    favorites:
+      - Sprint 42 — backend
+      - Waiting on me
+
+  - name: internal
+    url: https://youtrack.corp.local
+    token: ${YOUTRACK_TOKEN_INTERNAL}
+    # Certificate does not verify against the system roots? Point at the PEM
+    # bundle that does trust it. If you already export one for other tools,
+    # reference it instead of copying the path:
+    #   ca_file: ${NODE_EXTRA_CA_CERTS}
+    ca_file: /etc/ssl/certs/corp-ca.pem
+    # Last resort, and only if ca_file is not an option. It disables
+    # certificate verification for THIS provider, which means anyone able to
+    # intercept the connection gets the token. Mutually exclusive with
+    # ca_file; the header shows !insecure while it is on.
+    # insecure_skip_verify: true

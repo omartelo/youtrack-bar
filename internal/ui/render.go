@@ -1,0 +1,275 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"charm.land/bubbles/v2/list"
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
+
+	"github.com/omartelo/youtrack-bar/internal/youtrack"
+)
+
+var (
+	styTitle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")).Background(lipgloss.Color("62"))
+	styProvider = lipgloss.NewStyle().Foreground(lipgloss.Color("232")).Background(lipgloss.Color("208"))
+	styDim      = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	styRule     = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	stySection  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("62"))
+	styLabel    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	styValue    = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	styLink     = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Underline(true)
+	styHead     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
+	styAuthor   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("114"))
+	styFav      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+
+	// Every line inside the dialog carries the background itself. Nesting a
+	// styled string inside a background style does not work: the inner style
+	// emits an SGR reset that clears the background for the rest of the line.
+	dialogBG     = lipgloss.Color("236")
+	styDialogBox = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("203")).
+			BorderBackground(dialogBG).
+			Background(dialogBG).
+			Padding(1, 2)
+	styDialogTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203")).Background(dialogBG)
+	styDialogBody  = lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Background(dialogBG)
+	styDialogHint  = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Background(dialogBG)
+
+	styInsecure = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("232")).Background(lipgloss.Color("203"))
+)
+
+// link wraps text in an OSC 8 hyperlink. Ctrl+Click is the terminal's job —
+// which is exactly why this program never enables mouse tracking.
+func link(text, url string) string {
+	if url == "" {
+		return text
+	}
+	return styLink.Hyperlink(url).Render(text)
+}
+
+// --- list items -----------------------------------------------------------
+
+type filterItem struct {
+	youtrack.SavedQuery
+	fav bool
+}
+
+// Title keeps the two-column gutter whether or not the star is there, so
+// pinning something does not shift the whole list sideways.
+func (f filterItem) Title() string {
+	if f.fav {
+		return styFav.Render("★") + " " + f.Name
+	}
+	return "  " + f.Name
+}
+
+func (f filterItem) Description() string { return "  " + f.Query }
+func (f filterItem) FilterValue() string { return f.Name + " " + f.Query }
+
+type issueItem struct {
+	issue youtrack.Issue
+	// fields names the custom fields to show on the summary line. Empty means
+	// "the first few that have a value" — field names differ per instance.
+	fields []string
+}
+
+func (i issueItem) Title() string       { return i.issue.ID + "  " + i.issue.Summary }
+func (i issueItem) FilterValue() string { return i.issue.ID + " " + i.issue.Summary }
+
+func (i issueItem) Description() string {
+	parts := make([]string, 0, 4)
+	if len(i.fields) > 0 {
+		for _, name := range i.fields {
+			if v := i.issue.Field(name); v != "" {
+				parts = append(parts, v)
+			}
+		}
+	} else {
+		for _, f := range i.issue.Fields {
+			if len(parts) == 3 {
+				break
+			}
+			if v := f.String(); v != "" {
+				parts = append(parts, v)
+			}
+		}
+	}
+	parts = append(parts, "updated "+relTime(i.issue.Updated))
+	return strings.Join(parts, " · ")
+}
+
+var _ list.DefaultItem = issueItem{}
+var _ list.DefaultItem = filterItem{}
+
+// --- issue detail ---------------------------------------------------------
+
+// renderIssue composes the whole detail pane: header, fields, description,
+// attachments, links and comments, stacked into one scrollable document.
+func renderIssue(c *youtrack.Client, iss *youtrack.Issue, comments []youtrack.Comment, width int) string {
+	inner := max(20, width-2)
+	md := newMarkdown(inner - 2)
+
+	var b strings.Builder
+	b.WriteString(styHead.Render(link(iss.ID+"  "+iss.Summary, c.IssueURL(iss.ID))))
+	b.WriteString("\n")
+	b.WriteString(styDim.Render(fmt.Sprintf("reported by %s · created %s · updated %s",
+		fallback(iss.Reporter.String(), "—"), relTime(iss.Created), relTime(iss.Updated))))
+	b.WriteString("\n" + styRule.Render(strings.Repeat("─", inner)) + "\n")
+
+	if s := renderFields(*iss); s != "" {
+		b.WriteString(section("Fields", s))
+	}
+	b.WriteString(section("Description", md(iss.Description)))
+	if s := renderAttachments(c, iss.Attachments); s != "" {
+		b.WriteString(section("Attachments", s))
+	}
+	if s := renderLinks(c, iss.Links); s != "" {
+		b.WriteString(section("Links", s))
+	}
+	b.WriteString(section(fmt.Sprintf("Comments (%d)", len(comments)), renderComments(c, comments, md)))
+	return b.String()
+}
+
+func section(title, body string) string {
+	return "\n" + stySection.Render("▌ "+title) + "\n" + indent(body, 2) + "\n"
+}
+
+// renderFields lays out every custom field the API returned, in API order.
+// Nothing here knows the name of a single field: see the dynamic-fields
+// invariant in CLAUDE.md.
+func renderFields(iss youtrack.Issue) string {
+	type row struct{ k, v string }
+	rows := make([]row, 0, len(iss.Fields)+1)
+	for _, f := range iss.Fields {
+		if v := f.String(); v != "" {
+			rows = append(rows, row{f.Name, v})
+		}
+	}
+	if iss.Resolved != nil {
+		rows = append(rows, row{"Resolved", time.UnixMilli(*iss.Resolved).Format("2006-01-02 15:04")})
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+
+	pad := 0
+	for _, r := range rows {
+		pad = max(pad, lipgloss.Width(r.k))
+	}
+	var b strings.Builder
+	for _, r := range rows {
+		b.WriteString(styLabel.Render(r.k + strings.Repeat(" ", pad-lipgloss.Width(r.k))))
+		b.WriteString("  " + styValue.Render(r.v) + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func renderAttachments(c *youtrack.Client, as []youtrack.Attachment) string {
+	var b strings.Builder
+	for _, a := range as {
+		b.WriteString("◆ " + link(a.Name, c.AbsURL(a.URL)))
+		b.WriteString(styDim.Render("  "+humanBytes(a.Size)) + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func renderLinks(c *youtrack.Client, ls []youtrack.Link) string {
+	var b strings.Builder
+	for _, l := range ls {
+		for _, iss := range l.Issues {
+			b.WriteString(styLabel.Render(l.Label()) + "  ")
+			b.WriteString(link(iss.ID, c.IssueURL(iss.ID)))
+			b.WriteString("  " + styValue.Render(iss.Summary) + "\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func renderComments(c *youtrack.Client, cs []youtrack.Comment, md func(string) string) string {
+	if len(cs) == 0 {
+		return styDim.Render("(none)")
+	}
+	var b strings.Builder
+	for i, cm := range cs {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(styAuthor.Render(fallback(cm.Author.String(), "—")))
+		b.WriteString(styDim.Render("  "+relTime(cm.Created)) + "\n")
+		b.WriteString(md(cm.Text) + "\n")
+		if s := renderAttachments(c, cm.Attachments); s != "" {
+			b.WriteString(s + "\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// newMarkdown returns a reusable renderer bound to a width. GLAMOUR_STYLE
+// picks the theme; the default is dark.
+func newMarkdown(width int) func(string) string {
+	r, err := glamour.NewTermRenderer(glamour.WithEnvironmentConfig(), glamour.WithWordWrap(width))
+	return func(src string) string {
+		src = strings.TrimSpace(src)
+		if src == "" {
+			return styDim.Render("(empty)")
+		}
+		if err != nil {
+			return src
+		}
+		out, rerr := r.Render(src)
+		if rerr != nil {
+			return src
+		}
+		return strings.Trim(out, "\n")
+	}
+}
+
+// --- small helpers --------------------------------------------------------
+
+func indent(s string, n int) string {
+	p := strings.Repeat(" ", n)
+	return p + strings.ReplaceAll(s, "\n", "\n"+p)
+}
+
+func fallback(s, alt string) string {
+	if s == "" {
+		return alt
+	}
+	return s
+}
+
+func relTime(ms int64) string {
+	if ms == 0 {
+		return "—"
+	}
+	d := time.Since(time.UnixMilli(ms))
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	default:
+		return time.UnixMilli(ms).Format("2006-01-02")
+	}
+}
+
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
+}
