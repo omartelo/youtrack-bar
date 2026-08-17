@@ -43,6 +43,7 @@ type Model struct {
 
 	screen  screen
 	setup   setupForm
+	prompt  queryPrompt
 	filters list.Model
 	issues  list.Model
 	detail  viewport.Model
@@ -85,6 +86,7 @@ func New(cfg *config.Config, provider, path string) (*Model, error) {
 	m := &Model{
 		path:    path,
 		setup:   newSetupForm(path),
+		prompt:  newQueryPrompt(),
 		filters: newList("Filters"),
 		issues:  newList("Issues"),
 		detail:  viewport.New(),
@@ -256,6 +258,9 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.screen == screenSetup {
 		return m.setupKey(msg)
 	}
+	if m.prompt.active {
+		return m.promptKey(msg)
+	}
 
 	// While the list's own filter input is open every key belongs to it.
 	if (m.screen == screenFilters && m.filters.SettingFilter()) ||
@@ -293,6 +298,14 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.loadMoreIssues()
+
+	case key.Matches(msg, m.keys.Search):
+		if m.screen != screenFilters && m.screen != screenIssues {
+			return m, nil
+		}
+		cmd := m.prompt.open(m.query)
+		m.layout()
+		return m, cmd
 
 	case key.Matches(msg, m.keys.Favorite):
 		if m.screen != screenFilters {
@@ -336,6 +349,29 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, m.forward(msg)
+}
+
+// promptKey handles the raw-query input. Like the setup form it owns every key
+// while it is open, otherwise typing a query containing "for" would fire the
+// favourite, open-in-browser and reload commands.
+func (m *Model) promptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.prompt.close()
+		m.layout()
+		return m, nil
+	case "enter":
+		q := m.prompt.value()
+		m.prompt.close()
+		m.layout()
+		if q == "" {
+			return m, nil
+		}
+		return m, m.loadIssues(q)
+	}
+	return m, m.prompt.update(msg)
 }
 
 // dialogKey handles the modal. It swallows everything else so a stray key
@@ -525,6 +561,12 @@ func (m *Model) submitSetup() tea.Cmd {
 
 // forward hands the message to whichever sub-model owns the current screen.
 func (m *Model) forward(msg tea.Msg) tea.Cmd {
+	// The prompt floats above the screens, so it takes precedence — this is
+	// also what lets a query be pasted in.
+	if m.prompt.active {
+		return m.prompt.update(msg)
+	}
+
 	var cmd tea.Cmd
 	switch m.screen {
 	case screenSetup:
@@ -540,8 +582,9 @@ func (m *Model) forward(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) layout() {
-	body := max(1, m.h-3)
+	body := max(1, m.h-3-m.prompt.lines())
 	m.setup.setWidth(m.w)
+	m.prompt.setWidth(m.w)
 	m.filters.SetSize(m.w, body)
 	m.issues.SetSize(m.w, body)
 	m.detail.SetWidth(m.w)
@@ -573,7 +616,13 @@ func (m *Model) View() tea.View {
 		body = m.detail.View()
 	}
 
-	screen := lipgloss.JoinVertical(lipgloss.Left, m.header(), body, m.footer())
+	rows := []string{m.header()}
+	if m.prompt.active {
+		rows = append(rows, m.prompt.view())
+	}
+	rows = append(rows, body, m.footer())
+
+	screen := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	if m.dlg != nil {
 		screen = overlay(screen, m.dlg.view(m.w), m.w, m.h)
 	}
@@ -616,6 +665,9 @@ func (m *Model) footer() string {
 		// The dialog carries its own keys; repeating them down here just
 		// leaves the hint peeking out beside the box.
 		return ""
+	}
+	if m.prompt.active {
+		return styDim.Render("enter  run the query  ·  esc  cancel")
 	}
 	return m.help.View(screenKeys{m.keys, m.screen})
 }

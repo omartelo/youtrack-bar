@@ -25,6 +25,9 @@ var (
 	styAuthor   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("114"))
 	styFav      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 
+	styQueryLabel = lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("62"))
+
 	// Every line inside the dialog carries the background itself. Nesting a
 	// styled string inside a background style does not work: the inner style
 	// emits an SGR reset that clears the background for the rest of the line.
