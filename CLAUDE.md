@@ -25,6 +25,7 @@ internal/ui/setup.go         first-run configuration form
 internal/ui/query.go         raw-query prompt (`s`)
 internal/ui/dialog.go        modal error popup and the layer overlay
 internal/ui/browser.go       handing a URL to the desktop (`o`)
+internal/ui/notify.go        background watcher and the notification command
 internal/ui/render.go        styles, list items, issue detail composition
 internal/ui/keys.go          key bindings and per-screen help
 docs/tui-mockup.md           reference layout for every screen
@@ -113,16 +114,37 @@ These are not style preferences. Breaking any one of them breaks the product.
     persisted as the `${VAR}` reference — not the same thing as reading the
     variable at connect time. Do not make it the latter.
 
-11. **Errors go to the dialog, never to the header.** A wrapped TLS error is
+11. **Watching is session state and is never written back.** `watch:` in the
+    config seeds it; `w` toggles it for the session. Turning a background
+    poller on and off must not rewrite a file, and `config.Save` — which other
+    features do call — has to carry `Provider.Watch` through untouched. See
+    `TestWatchToggleDoesNotTouchTheConfig`.
+
+12. **The first poll of a filter only seeds.** `watcher.record` returns nothing
+    the first time it sees a filter ID. Without that, launching the program
+    announces every issue that already matched, which is noise, not news. The
+    same rule is why `w` on a filter drops its `seen` entry: re-watching starts
+    from silence.
+
+13. **A background poll never raises a modal.** It sets `watch.failed` and the
+    header says so. An error from something the user did not ask for right now
+    must not cover what they are reading.
+
+14. **Every watch toggle bumps `watchGen`.** Ticks and results carry the
+    generation they were scheduled under and are dropped if it has moved on.
+    Without it each toggle leaves another `tea.Tick` chain polling the
+    instance forever. See `TestWatchTogglesRetireTheOldTicker`.
+
+15. **Errors go to the dialog, never to the header.** A wrapped TLS error is
     three lines long; the header is one. `errMsg` builds a `*dialog`, which
     owns the keyboard until dismissed.
 
-12. **`overlay` must go through `lipgloss.NewCompositor`.** `Canvas.Compose`
+16. **`overlay` must go through `lipgloss.NewCompositor`.** `Canvas.Compose`
     on a parent layer calls `Layer.Draw`, which paints that layer's own content
     and ignores its children — you get the base alone or the box alone, never
     both. See `TestOverlayDrawsOverBase`.
 
-13. **Inside the dialog, every line carries its own background.** A styled
+17. **Inside the dialog, every line carries its own background.** A styled
     string nested in a background style emits an SGR reset that kills the
     background for the rest of that row, so a title or hint rendered by an
     inner style leaves a black band across the box. Style each line directly
@@ -130,7 +152,7 @@ These are not style preferences. Breaking any one of them breaks the product.
     Same reason each block is wrapped to its final width before the border
     style sees it. See `TestDialogBoxIsRectangular`.
 
-14. **`internal/ui` does not speak HTTP and `internal/youtrack` does not speak
+18. **`internal/ui` does not speak HTTP and `internal/youtrack` does not speak
     lipgloss.** The client returns data; the UI decides color and layout.
 
 ## Known ceilings
@@ -167,6 +189,21 @@ of them needs "fixing" before somebody actually complains.
   gone on restart and cannot be pinned, because `favorites` records IDs and an
   ad-hoc query has none. *Upgrade:* a `queries:` list on the provider, which
   would then need synthetic IDs like the built-ins have.
+
+- **Watching only compares the first page.** A poll fetches `page_size`
+  results and diffs those, so an issue that lands outside the first page never
+  registers. Fine for a filter sorted newest-first, wrong for one sorted by
+  priority. *Upgrade:* sort the watch query by `updated desc` explicitly rather
+  than trusting the saved search's own order.
+
+- **Only the active provider is polled.** Switching providers resets the
+  watcher — what was seen, what was marked and what was being watched. *Upgrade:*
+  a client and watcher per provider, which means keeping them all alive.
+
+- **The notification is fire-and-forget.** No click-to-open, no grouping across
+  filters, no rate limit beyond `watch_interval`. Two watched filters gaining
+  issues in the same poll produce two popups. *Upgrade:* zenity cannot do
+  actionable notifications; that needs `notify-send --action` and a listener.
 
 - **No cache.** Every navigation re-fetches. Fine on a good link, painful over
   VPN. *Upgrade:* measure first; if it hurts, a `map[string]issueCache` with a

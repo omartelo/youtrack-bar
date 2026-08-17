@@ -24,6 +24,12 @@ var (
 	styHead     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
 	styAuthor   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("114"))
 	styFav      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	styNew      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
+
+	styWatch = lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("42"))
+	styWatchFail = lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("208"))
 
 	styQueryLabel = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("62"))
@@ -58,16 +64,22 @@ func link(text, url string) string {
 
 type filterItem struct {
 	youtrack.SavedQuery
-	fav bool
+	fav     bool
+	watched bool
 }
 
 // Title keeps the two-column gutter whether or not the star is there, so
 // pinning something does not shift the whole list sideways.
 func (f filterItem) Title() string {
+	mark := " "
 	if f.fav {
-		return styFav.Render("★") + " " + f.Name
+		mark = styFav.Render("★")
 	}
-	return "  " + f.Name
+	name := f.Name
+	if f.watched {
+		name += styWatch.Render(" watching ")
+	}
+	return mark + " " + name
 }
 
 func (f filterItem) Description() string { return "  " + f.Query }
@@ -78,9 +90,20 @@ type issueItem struct {
 	// fields names the custom fields to show on the summary line. Empty means
 	// "the first few that have a value" — field names differ per instance.
 	fields []string
+	// isNew marks an issue a watched filter picked up since this session
+	// started, until it is opened.
+	isNew bool
 }
 
-func (i issueItem) Title() string       { return i.issue.ID + "  " + i.issue.Summary }
+// Title reserves the same two-column gutter as the filters list, so a new
+// arrival never shifts the rows around it.
+func (i issueItem) Title() string {
+	mark := "  "
+	if i.isNew {
+		mark = styNew.Render("●") + " "
+	}
+	return mark + i.issue.ID + "  " + i.issue.Summary
+}
 func (i issueItem) FilterValue() string { return i.issue.ID + " " + i.issue.Summary }
 
 func (i issueItem) Description() string {
@@ -102,7 +125,7 @@ func (i issueItem) Description() string {
 		}
 	}
 	parts = append(parts, "updated "+relTime(i.issue.Updated))
-	return strings.Join(parts, " · ")
+	return "  " + strings.Join(parts, " · ")
 }
 
 var _ list.DefaultItem = issueItem{}

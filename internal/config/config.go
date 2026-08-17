@@ -8,12 +8,26 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 // DefaultPageSize is used when page_size is absent or non-positive.
 const DefaultPageSize = 50
+
+// Polling defaults for watched filters.
+const (
+	DefaultWatchInterval = 2 * time.Minute
+	MinWatchInterval     = 30 * time.Second
+)
+
+// Supported values for `notifier`.
+const (
+	NotifierZenity     = "zenity"
+	NotifierNotifySend = "notify-send"
+	NotifierNone       = "none"
+)
 
 // Provider is a single YouTrack instance.
 type Provider struct {
@@ -32,6 +46,12 @@ type Provider struct {
 	// written by an earlier version still work and are rewritten to IDs on the
 	// next pin.
 	Favorites []string `yaml:"favorites,omitempty"`
+
+	// Watch seeds the saved-search IDs polled in the background for new
+	// issues. It is read, never written: `w` changes the watch list for the
+	// session only, so a background poller can be turned on and off without
+	// rewriting the file.
+	Watch []string `yaml:"watch,omitempty"`
 
 	// CAFile is a PEM bundle to trust on top of the system roots — the right
 	// answer for an instance behind a private or corporate CA.
@@ -53,7 +73,17 @@ type Provider struct {
 
 // Config is the whole config.yml.
 type Config struct {
-	PageSize  int        `yaml:"page_size"`
+	PageSize int `yaml:"page_size"`
+
+	// WatchInterval is how often watched filters are polled, as a Go duration
+	// ("2m", "30s"). Notifier picks the command that puts a notification on
+	// screen — that one genuinely differs per machine.
+	WatchInterval string `yaml:"watch_interval,omitempty"`
+	Notifier      string `yaml:"notifier,omitempty"`
+
+	// WatchEvery is WatchInterval parsed.
+	WatchEvery time.Duration `yaml:"-"`
+
 	Providers []Provider `yaml:"providers"`
 }
 
@@ -99,6 +129,28 @@ func (c *Config) Validate() error {
 	if c.PageSize <= 0 {
 		c.PageSize = DefaultPageSize
 	}
+
+	c.WatchEvery = DefaultWatchInterval
+	if s := strings.TrimSpace(c.WatchInterval); s != "" {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return fmt.Errorf("`watch_interval`: %w", err)
+		}
+		// A tighter loop is a self-inflicted denial of service on the
+		// instance, not a feature.
+		if d < MinWatchInterval {
+			return fmt.Errorf("`watch_interval` %s is below the %s minimum", d, MinWatchInterval)
+		}
+		c.WatchEvery = d
+	}
+
+	switch c.Notifier {
+	case "", NotifierZenity, NotifierNotifySend, NotifierNone:
+	default:
+		return fmt.Errorf("`notifier` %q: want %q, %q or %q",
+			c.Notifier, NotifierZenity, NotifierNotifySend, NotifierNone)
+	}
+
 	if len(c.Providers) == 0 {
 		return fmt.Errorf("no provider declared under `providers`")
 	}
