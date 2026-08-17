@@ -86,7 +86,9 @@ func New(base, token string, t TLS) (*Client, error) {
 	return &Client{
 		base:  strings.TrimRight(base, "/"),
 		token: token,
-		http:  &http.Client{Timeout: 30 * time.Second, Transport: tr},
+		// Long enough for a slow instance over VPN, short enough that a
+		// blocked request does not leave the TUI showing a spinner forever.
+		http: &http.Client{Timeout: 30 * time.Second, Transport: tr},
 	}, nil
 }
 

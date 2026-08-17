@@ -2,11 +2,9 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -224,7 +222,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		at := m.issues.Index()
 		if msg.appendTo {
-			m.allIssues = append(m.allIssues, msg.issues...)
+			m.allIssues = appendNewIssues(m.allIssues, msg.issues)
 		} else {
 			m.allIssues, at = msg.issues, 0
 		}
@@ -514,12 +512,28 @@ func (m *Model) migrateFavorites() {
 	}
 }
 
+// appendNewIssues adds a page, skipping anything already on the list. Paging is
+// by offset, so an issue added to the filter between two requests shifts the
+// window and makes the next page overlap the previous one.
+func appendNewIssues(have, page []youtrack.Issue) []youtrack.Issue {
+	seen := make(map[string]bool, len(have))
+	for _, iss := range have {
+		seen[iss.ID] = true
+	}
+	for _, iss := range page {
+		if !seen[iss.ID] {
+			have = append(have, iss)
+		}
+	}
+	return have
+}
+
 // setIssueItems rebuilds the issue list from every page fetched so far.
 func (m *Model) setIssueItems() tea.Cmd {
 	fields := m.cfg.Providers[m.provider].ListFields
 	items := make([]list.Item, 0, len(m.allIssues))
 	for _, iss := range m.allIssues {
-		items = append(items, issueItem{issue: iss, fields: fields, isNew: m.watch.fresh[iss.ID]})
+		items = append(items, issueItem{issue: iss, fields: fields, isNew: m.watch.isFresh(iss.ID)})
 	}
 	return m.issues.SetItems(items)
 }
@@ -534,60 +548,6 @@ func (m *Model) refreshIssueMarks() tea.Cmd {
 	cmd := m.setIssueItems()
 	m.issues.Select(at)
 	return cmd
-}
-
-// --- background watching ---------------------------------------------------
-
-// startWatch retires any running tick chain and begins a new one. The first
-// poll only seeds, so nothing is announced for issues that were already there.
-func (m *Model) startWatch() tea.Cmd {
-	m.watchGen++
-	if len(m.watch.watching) == 0 {
-		return nil
-	}
-	return tea.Batch(m.pollWatched(), m.tickWatch())
-}
-
-func (m *Model) tickWatch() tea.Cmd {
-	gen := m.watchGen
-	return tea.Tick(m.cfg.WatchEvery, func(time.Time) tea.Msg {
-		return watchTickMsg{gen: gen}
-	})
-}
-
-// pollWatched fetches every watched filter once. Watched IDs that no longer
-// resolve to a saved search are skipped rather than reported.
-func (m *Model) pollWatched() tea.Cmd {
-	c, gen, top := m.client, m.watchGen, m.cfg.PageSize
-	var cmds []tea.Cmd
-	for _, q := range m.savedQueries {
-		if !m.watch.watching[q.ID] {
-			continue
-		}
-		id, query, label := q.ID, q.Query, q.Name
-		cmds = append(cmds, func() tea.Msg {
-			issues, err := c.Issues(context.Background(), query, 0, top)
-			return watchResultMsg{gen: gen, filterID: id, label: label, issues: issues, err: err}
-		})
-	}
-	return tea.Batch(cmds...)
-}
-
-// toggleWatch starts or stops monitoring the selected filter for this session.
-// Nothing is written to the config: turning a poller on and off should not
-// rewrite a file.
-func (m *Model) toggleWatch() tea.Cmd {
-	it, ok := m.filters.SelectedItem().(filterItem)
-	if !ok {
-		return nil
-	}
-	if m.watch.watching[it.ID] {
-		delete(m.watch.watching, it.ID)
-		delete(m.watch.seen, it.ID)
-	} else {
-		m.watch.watching[it.ID] = true
-	}
-	return tea.Batch(m.setFilterItems(), m.startWatch())
 }
 
 // toggleFavorite pins or unpins the selected filter and persists it. Matching
@@ -611,10 +571,18 @@ func (m *Model) toggleFavorite() tea.Cmd {
 	cmd := m.setFilterItems()
 	// Follow the item to its new position instead of resetting to the top:
 	// pinning moves it, the cursor should go with it.
-	for i, li := range m.filters.Items() {
-		if f, ok := li.(filterItem); ok && f.ID == it.ID {
-			m.filters.Select(i)
-			break
+	//
+	// Only while unfiltered. Items() is the unfiltered order but Select indexes
+	// the visible one, so following a filtered list lands the cursor on some
+	// other row — and the next `f` then pins the wrong filter. With a filter
+	// applied the visible order is the fuzzy ranking, which pinning does not
+	// touch, so the cursor is already where it belongs.
+	if !m.filters.IsFiltered() {
+		for i, li := range m.filters.Items() {
+			if f, ok := li.(filterItem); ok && f.ID == it.ID {
+				m.filters.Select(i)
+				break
+			}
 		}
 	}
 	return cmd
@@ -658,54 +626,6 @@ func (m *Model) saveConfig() error {
 	return nil
 }
 
-func (m *Model) setupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c", "esc":
-		return m, tea.Quit
-	case "tab", "down":
-		return m, m.setup.focusOn(m.setup.focus + 1)
-	case "shift+tab", "up":
-		return m, m.setup.focusOn(m.setup.focus - 1)
-	case "ctrl+r":
-		m.setup.toggleReveal()
-		return m, nil
-	case "enter":
-		if m.setup.focus != fieldCount-1 {
-			return m, m.setup.focusOn(m.setup.focus + 1)
-		}
-		return m, m.submitSetup()
-	}
-	return m, m.setup.update(msg)
-}
-
-// submitSetup validates the typed provider and then proves it against the API.
-// The file is written by the filtersMsg handler, not here.
-func (m *Model) submitSetup() tea.Cmd {
-	typed := config.Provider{
-		Name:   m.setup.value(fieldName),
-		URL:    m.setup.value(fieldURL),
-		Token:  m.setup.value(fieldToken),
-		CAFile: m.setup.value(fieldCA),
-	}
-
-	// Validate normalizes in place and expands ${VARS} in the token, so it
-	// runs on its own copy: what gets persisted must stay the reference the
-	// user typed, never the resolved secret.
-	live := &config.Config{Providers: []config.Provider{typed}}
-	if err := live.Validate(); err != nil {
-		m.dlg = infoDialog("Check the form", err.Error())
-		return nil
-	}
-
-	m.cfg = live
-	m.savePending = true
-	if err := m.setProvider(0); err != nil {
-		m.dlg = errorDialog(err)
-		return nil
-	}
-	return m.loadFilters()
-}
-
 // forward hands the message to whichever sub-model owns the current screen.
 func (m *Model) forward(msg tea.Msg) tea.Cmd {
 	// The prompt floats above the screens, so it takes precedence — this is
@@ -728,8 +648,12 @@ func (m *Model) forward(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// chromeLines is what the layout reserves outside the body: two header lines
+// (title row and rule) plus one footer line.
+const chromeLines = 3
+
 func (m *Model) layout() {
-	body := max(1, m.h-3-m.prompt.lines())
+	body := max(1, m.h-chromeLines-m.prompt.lines())
 	m.setup.setWidth(m.w)
 	m.prompt.setWidth(m.w)
 	m.filters.SetSize(m.w, body)
@@ -827,88 +751,4 @@ func (m *Model) footer() string {
 		return styDim.Render("enter  run the query  ·  esc  cancel")
 	}
 	return m.help.View(screenKeys{m.keys, m.screen})
-}
-
-// --- messages -------------------------------------------------------------
-
-type errMsg struct {
-	gen int
-	err error
-}
-
-type filtersMsg struct {
-	gen     int
-	queries []youtrack.SavedQuery
-}
-
-type issuesMsg struct {
-	gen      int
-	issues   []youtrack.Issue
-	appendTo bool // a further page, not a fresh query
-}
-
-type detailMsg struct {
-	gen      int
-	issue    *youtrack.Issue
-	comments []youtrack.Comment
-}
-
-// begin marks a new request generation and returns the values a command needs
-// to be self-contained (invariant: no I/O reads Model state).
-func (m *Model) begin() (*youtrack.Client, int) {
-	m.gen++
-	m.loading, m.dlg = true, nil
-	return m.client, m.gen
-}
-
-func (m *Model) loadFilters() tea.Cmd {
-	c, gen := m.begin()
-	return func() tea.Msg {
-		saved, err := c.SavedQueries(context.Background())
-		if err != nil {
-			return errMsg{gen, err}
-		}
-		return filtersMsg{gen, append(append([]youtrack.SavedQuery(nil), builtinFilters...), saved...)}
-	}
-}
-
-func (m *Model) loadIssues(query string) tea.Cmd {
-	m.query = query
-	return m.fetchIssues(query, 0, false)
-}
-
-// loadMoreIssues fetches the page after everything already on screen.
-func (m *Model) loadMoreIssues() tea.Cmd {
-	if !m.moreIssues || m.query == "" {
-		return nil
-	}
-	return m.fetchIssues(m.query, len(m.allIssues), true)
-}
-
-func (m *Model) fetchIssues(query string, skip int, appendTo bool) tea.Cmd {
-	c, gen := m.begin()
-	top := m.cfg.PageSize
-	return func() tea.Msg {
-		issues, err := c.Issues(context.Background(), query, skip, top)
-		if err != nil {
-			return errMsg{gen, err}
-		}
-		return issuesMsg{gen, issues, appendTo}
-	}
-}
-
-func (m *Model) loadDetail(id string) tea.Cmd {
-	c, gen := m.begin()
-	return func() tea.Msg {
-		ctx := context.Background()
-		issue, err := c.Issue(ctx, id)
-		if err != nil {
-			return errMsg{gen, err}
-		}
-		comments, err := c.Comments(ctx, id)
-		if err != nil {
-			return errMsg{gen, err}
-		}
-		return detailMsg{gen, issue, comments}
-	}
 }

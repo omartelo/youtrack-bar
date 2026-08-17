@@ -42,7 +42,7 @@ func TestWatcherFirstPollIsSilent(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "PAY-99" {
 		t.Fatalf("reported %v, want just PAY-99", ids(got))
 	}
-	if !w.fresh["PAY-99"] {
+	if !w.isFresh("PAY-99") {
 		t.Error("the arrival was not marked new")
 	}
 
@@ -178,14 +178,14 @@ func TestWatchTogglesRetireTheOldTicker(t *testing.T) {
 func TestOpeningAnIssueClearsItsMark(t *testing.T) {
 	m := testModel(t, 50)
 	m.allIssues = page(2, 1)
-	m.watch.fresh["PAY-1"] = true
+	m.watch.fresh["PAY-1"] = "145-3"
 	m.setIssueItems()
 
 	if !m.issues.Items()[0].(issueItem).isNew {
 		t.Fatal("PAY-1 was not marked new")
 	}
 	m.Update(detailMsg{gen: m.gen, issue: &youtrack.Issue{ID: "PAY-1"}})
-	if m.watch.fresh["PAY-1"] {
+	if m.watch.isFresh("PAY-1") {
 		t.Error("reading the issue left it marked new")
 	}
 	if m.issues.Items()[0].(issueItem).isNew {

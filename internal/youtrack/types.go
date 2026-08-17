@@ -110,15 +110,12 @@ type Comment struct {
 
 // CustomField is a project-defined field. Value is kept raw because its shape
 // depends on the field type, which varies per YouTrack instance — see the
-// "campos dinâmicos" invariant in CLAUDE.md.
+// dynamic-fields invariant in CLAUDE.md.
 type CustomField struct {
 	Name  string          `json:"name"`
 	Type  string          `json:"$type"`
 	Value json.RawMessage `json:"value"`
 }
-
-// Empty reports whether the field has no value worth showing.
-func (f CustomField) Empty() bool { return f.String() == "" }
 
 // String renders any custom field value into a display string.
 func (f CustomField) String() string {

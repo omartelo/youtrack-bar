@@ -7,6 +7,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// queryCharLimit caps the raw query. YouTrack queries with several field
+// clauses run long, so this is looser than the setup fields; it exists to stop
+// a runaway paste, not to constrain a real query.
+const queryCharLimit = 500
+
 // queryPrompt is the one-line input for typing a YouTrack query by hand rather
 // than picking a saved search. It is a peer of the list's own `/` filter, which
 // only narrows what is already on screen.
@@ -18,7 +23,7 @@ type queryPrompt struct {
 func newQueryPrompt() queryPrompt {
 	in := textinput.New()
 	in.Prompt = ""
-	in.CharLimit = 500
+	in.CharLimit = queryCharLimit
 	in.Placeholder = "project: PAY #Unresolved for: me"
 	return queryPrompt{input: in}
 }
