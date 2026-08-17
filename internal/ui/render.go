@@ -26,10 +26,10 @@ var (
 	styFav      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	styNew      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
 
-	styWatch = lipgloss.NewStyle().Bold(true).
-			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("42"))
-	styWatchFail = lipgloss.NewStyle().Bold(true).
-			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("208"))
+	// Watching is ambient state, not an alert: a glyph in the gutter, no filled
+	// chip. The header already carries two of those for identity.
+	styWatch     = lipgloss.NewStyle().Foreground(lipgloss.Color("44"))
+	styWatchFail = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
 
 	styQueryLabel = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("62"))
@@ -68,21 +68,21 @@ type filterItem struct {
 	watched bool
 }
 
-// Title keeps the two-column gutter whether or not the star is there, so
-// pinning something does not shift the whole list sideways.
+// Title reserves one gutter column per marker, always, so pinning or watching
+// something never shifts the list sideways. Repeating the word "watching" on
+// every row was louder than the names it was decorating.
 func (f filterItem) Title() string {
-	mark := " "
+	fav, watch := " ", " "
 	if f.fav {
-		mark = styFav.Render("★")
+		fav = styFav.Render("★")
 	}
-	name := f.Name
 	if f.watched {
-		name += styWatch.Render(" watching ")
+		watch = styWatch.Render("◉")
 	}
-	return mark + " " + name
+	return fav + " " + watch + " " + f.Name
 }
 
-func (f filterItem) Description() string { return "  " + f.Query }
+func (f filterItem) Description() string { return "    " + f.Query }
 func (f filterItem) FilterValue() string { return f.Name + " " + f.Query }
 
 type issueItem struct {

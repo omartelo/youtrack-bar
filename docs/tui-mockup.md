@@ -141,20 +141,30 @@ never shifts the list sideways.
 
 ## 1c — Watching
 
-`w` polls a filter in the background. The row carries a `watching` badge, the
-header counts them, and a poll that fails turns the count orange rather than
-raising a modal over whatever is on screen.
+`w` polls a filter in the background. Each marker gets its own gutter column —
+`★` pinned, `◉` watched — so a row never shifts when either is toggled, and the
+name is never pushed around by a badge. The header carries the count; a poll
+that fails turns it orange rather than raising a modal over what is on screen.
 
 ```
- youtrack-bar  acme  watching 1                                        pick a filter
+ youtrack-bar  acme  ◉ 2                                               pick a filter
 ────────────────────────────────────────────────────────────────────────────────────
    Filters                                                                  5 items
 
-  ★ Sprint 42 — backend  watching
-    project: PAY Sprint: {Sprint 42} #Unresolved
+  ★ ◉ Sprint 42 — backend
+      project: PAY Sprint: {Sprint 42} #Unresolved
 
-    My open issues
-    for: me #Unresolved
+    ◉ Waiting on me
+      State: {Waiting for review}
+
+      My open issues
+      for: me #Unresolved
+```
+
+Failing that, the count says so and stays out of the way:
+
+```
+ youtrack-bar  acme  ◉ 2 failed                                        pick a filter
 ```
 
 An issue that turns up in a watched filter raises one notification per filter

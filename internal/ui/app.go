@@ -788,12 +788,12 @@ func (m *Model) header() string {
 		left += styInsecure.Render(" !insecure ")
 	}
 	if n := len(m.watch.watching); n > 0 {
-		style, label := styWatch, fmt.Sprintf(" watching %d ", n)
+		style, label := styWatch, fmt.Sprintf("◉ %d", n)
 		if m.watch.failed {
 			// A background poll cannot raise a modal, so it says so here.
-			style, label = styWatchFail, fmt.Sprintf(" watch failed (%d) ", n)
+			style, label = styWatchFail, fmt.Sprintf("◉ %d failed", n)
 		}
-		left += style.Render(label)
+		left += " " + style.Render(label)
 	}
 
 	var right string
