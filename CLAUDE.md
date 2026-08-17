@@ -22,7 +22,9 @@ internal/youtrack/client.go  read-only REST client
 internal/youtrack/types.go   API types + dynamic custom-field rendering
 internal/ui/app.go           root bubbletea model (4 screens, one state machine)
 internal/ui/setup.go         first-run configuration form
+internal/ui/query.go         raw-query prompt (`s`)
 internal/ui/dialog.go        modal error popup and the layer overlay
+internal/ui/browser.go       handing a URL to the desktop (`o`)
 internal/ui/render.go        styles, list items, issue detail composition
 internal/ui/keys.go          key bindings and per-screen help
 docs/tui-mockup.md           reference layout for every screen
@@ -79,9 +81,11 @@ These are not style preferences. Breaking any one of them breaks the product.
    and commands never read `Model` state — `begin()` hands them everything
    they need. `View` is pure: same state, same output.
 
-8. **The setup form owns every key while it is up.** `onKey` routes to
-   `setupKey` before any global binding, otherwise `q`, `p` and `/` would
-   trigger commands instead of typing characters.
+8. **Any open text input owns every key while it is up.** `onKey` routes to
+   `setupKey` and `promptKey` before any global binding, otherwise `q`, `p`,
+   `/`, `f`, `o` and `s` would trigger commands instead of typing characters —
+   `for: me` alone hits four of them. `forward` gives the prompt the same
+   precedence so a query can be pasted.
 
 9. **`Update` forwards every message it does not handle to the active
    sub-model.** Never `return m, nil` as the fallthrough. The bubbles answer
@@ -141,26 +145,28 @@ of them needs "fixing" before somebody actually complains.
   `submitSetup` append to `m.cfg.Providers` instead of replacing them, then
   reach the screen from a key on the filters list.
 
-- **No pagination.** One request, `$top = page_size` (default 50). A filter
-  with 800 issues shows the first 50. *Upgrade:* an `m` key firing
-  `Issues(query, skip=len(items), top=page_size)` and appending to the list.
+- **Paging is forward-only and has no total.** `m` appends the next page;
+  there is no way back and no "showing 50 of 812", because a count is a second
+  request. A short page is the only end-of-list signal, which also means a
+  filter whose size is an exact multiple of `page_size` offers one empty
+  fetch. *Upgrade:* `/api/issuesGetter/count` for the total, if the extra round
+  trip is worth it.
 
 - **Provider switching cycles, it does not offer a picker.** `p` advances to
   the next provider. Better than a modal with 2–3 providers, annoying with 8.
   *Upgrade:* a fourth screen reusing the filters' `list.Model`.
 
-- **Favourites are ours, not YouTrack's, and match by name.** The REST API
-  exposes no favourite/pinned flag on `SavedQuery` — `StarWatchFolder` stars
-  *issues*, not searches — so `favorites` lives in our config. Matching is by
-  the name the user sees, which means a saved search sharing a name with a
-  built-in toggles both, and renaming a search in YouTrack loses its pin.
-  *Upgrade:* match on `SavedQuery.ID` and keep the name only for display; the
-  built-ins would need synthetic IDs.
+- **Favourites are ours, not YouTrack's.** The REST API exposes no
+  favourite/pinned flag on `SavedQuery` — `StarWatchFolder` stars *issues*, not
+  searches — so `favorites` lives in our config. It records IDs, which buys
+  surviving a rename at the cost of readability: `- 145-3` says nothing to
+  someone editing the file by hand. *Upgrade:* an `{id, name}` mapping, which
+  needs a custom `UnmarshalYAML` to keep reading the two older formats.
 
-- **No free-form query.** Only the user's saved searches plus two built-ins
-  (`#Unresolved`, `for: me #Unresolved`). `/` fuzzy-filters the filter names
-  locally; it does not query YouTrack. *Upgrade:* a `textinput` on the filters
-  screen feeding the raw string to `Issues()`.
+- **A raw query is not saved anywhere.** `s` runs it for the session; it is
+  gone on restart and cannot be pinned, because `favorites` records IDs and an
+  ad-hoc query has none. *Upgrade:* a `queries:` list on the provider, which
+  would then need synthetic IDs like the built-ins have.
 
 - **No cache.** Every navigation re-fetches. Fine on a good link, painful over
   VPN. *Upgrade:* measure first; if it hurts, a `map[string]issueCache` with a

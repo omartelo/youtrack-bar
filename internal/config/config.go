@@ -26,9 +26,11 @@ type Provider struct {
 	// line. Field names differ per YouTrack instance, hence the knob.
 	ListFields []string `yaml:"list_fields,omitempty"`
 
-	// Favorites are filter names pinned to the top of the filters screen, in
-	// the order they were pinned. YouTrack's REST API exposes no favourite or
-	// pinned flag on a SavedQuery, so this is ours and lives here.
+	// Favorites are saved-search IDs pinned to the top of the filters screen,
+	// in the order they were pinned. YouTrack's REST API exposes no favourite
+	// or pinned flag on a SavedQuery, so this is ours and lives here. Names
+	// written by an earlier version still work and are rewritten to IDs on the
+	// next pin.
 	Favorites []string `yaml:"favorites,omitempty"`
 
 	// CAFile is a PEM bundle to trust on top of the system roots — the right

@@ -28,10 +28,12 @@ const (
 	screenDetail
 )
 
-// builtinFilters are always offered on top of the user's saved searches.
+// builtinFilters are always offered alongside the user's saved searches. Their
+// IDs are synthetic and prefixed so they can never collide with a YouTrack
+// entity ID, and they are what `favorites` records.
 var builtinFilters = []youtrack.SavedQuery{
-	{Name: "My open issues", Query: "for: me #Unresolved"},
-	{Name: "All unresolved", Query: "#Unresolved"},
+	{ID: "builtin:my-open-issues", Name: "My open issues", Query: "for: me #Unresolved"},
+	{ID: "builtin:all-unresolved", Name: "All unresolved", Query: "#Unresolved"},
 }
 
 // Model is the root program state.
@@ -43,6 +45,7 @@ type Model struct {
 
 	screen  screen
 	setup   setupForm
+	prompt  queryPrompt
 	filters list.Model
 	issues  list.Model
 	detail  viewport.Model
@@ -62,6 +65,11 @@ type Model struct {
 	// favouriting can re-sort without another round trip.
 	savedQueries []youtrack.SavedQuery
 
+	// allIssues accumulates across pages; it is also what the next $skip is
+	// counted from. moreIssues is false once a short page comes back.
+	allIssues  []youtrack.Issue
+	moreIssues bool
+
 	query    string
 	current  *youtrack.Issue
 	comments []youtrack.Comment
@@ -80,6 +88,7 @@ func New(cfg *config.Config, provider, path string) (*Model, error) {
 	m := &Model{
 		path:    path,
 		setup:   newSetupForm(path),
+		prompt:  newQueryPrompt(),
 		filters: newList("Filters"),
 		issues:  newList("Issues"),
 		detail:  viewport.New(),
@@ -185,6 +194,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenFilters
 		}
 		m.savedQueries = msg.queries
+		m.migrateFavorites()
 		return m, m.setFilterItems()
 
 	case issuesMsg:
@@ -193,13 +203,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loading = false
 		m.screen = screenIssues
-		fields := m.cfg.Providers[m.provider].ListFields
-		items := make([]list.Item, 0, len(msg.issues))
-		for _, iss := range msg.issues {
-			items = append(items, issueItem{issue: iss, fields: fields})
+
+		// A short page is how YouTrack says "that was the last one" — it has no
+		// total count worth paying for.
+		m.moreIssues = len(msg.issues) == m.cfg.PageSize
+		m.keys.More.SetEnabled(m.moreIssues)
+
+		at := m.issues.Index()
+		if msg.appendTo {
+			m.allIssues = append(m.allIssues, msg.issues...)
+		} else {
+			m.allIssues, at = msg.issues, 0
 		}
-		m.issues.Select(0)
-		return m, m.issues.SetItems(items)
+		cmd := m.setIssueItems()
+		m.issues.Select(at)
+		return m, cmd
 
 	case detailMsg:
 		if msg.gen != m.gen {
@@ -243,6 +261,9 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.screen == screenSetup {
 		return m.setupKey(msg)
 	}
+	if m.prompt.active {
+		return m.promptKey(msg)
+	}
 
 	// While the list's own filter input is open every key belongs to it.
 	if (m.screen == screenFilters && m.filters.SettingFilter()) ||
@@ -275,6 +296,20 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Reload):
 		return m, m.reload()
 
+	case key.Matches(msg, m.keys.More):
+		if m.screen != screenIssues {
+			return m, nil
+		}
+		return m, m.loadMoreIssues()
+
+	case key.Matches(msg, m.keys.Search):
+		if m.screen != screenFilters && m.screen != screenIssues {
+			return m, nil
+		}
+		cmd := m.prompt.open(m.query)
+		m.layout()
+		return m, cmd
+
 	case key.Matches(msg, m.keys.Favorite):
 		if m.screen != screenFilters {
 			return m, nil
@@ -306,7 +341,6 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch m.screen {
 		case screenFilters:
 			if it, ok := m.filters.SelectedItem().(filterItem); ok {
-				m.query = it.Query
 				return m, m.loadIssues(it.Query)
 			}
 		case screenIssues:
@@ -318,6 +352,29 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, m.forward(msg)
+}
+
+// promptKey handles the raw-query input. Like the setup form it owns every key
+// while it is open, otherwise typing a query containing "for" would fire the
+// favourite, open-in-browser and reload commands.
+func (m *Model) promptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.prompt.close()
+		m.layout()
+		return m, nil
+	case "enter":
+		q := m.prompt.value()
+		m.prompt.close()
+		m.layout()
+		if q == "" {
+			return m, nil
+		}
+		return m, m.loadIssues(q)
+	}
+	return m, m.prompt.update(msg)
 }
 
 // dialogKey handles the modal. It swallows everything else so a stray key
@@ -360,8 +417,8 @@ func (m *Model) trustAnyway() tea.Cmd {
 // else keeps the order YouTrack returned.
 func (m *Model) setFilterItems() tea.Cmd {
 	fav := m.cfg.Providers[m.provider].Favorites
-	rank := func(name string) int {
-		if i := slices.Index(fav, name); i >= 0 {
+	rank := func(id string) int {
+		if i := slices.Index(fav, id); i >= 0 {
 			return i
 		}
 		return len(fav)
@@ -369,29 +426,61 @@ func (m *Model) setFilterItems() tea.Cmd {
 
 	sorted := slices.Clone(m.savedQueries)
 	slices.SortStableFunc(sorted, func(a, b youtrack.SavedQuery) int {
-		return rank(a.Name) - rank(b.Name)
+		return rank(a.ID) - rank(b.ID)
 	})
 
 	items := make([]list.Item, 0, len(sorted))
 	for _, q := range sorted {
-		items = append(items, filterItem{SavedQuery: q, fav: rank(q.Name) < len(fav)})
+		items = append(items, filterItem{SavedQuery: q, fav: rank(q.ID) < len(fav)})
 	}
 	return m.filters.SetItems(items)
 }
 
+// migrateFavorites rewrites favourites recorded as names — the original format
+// — into IDs, so that renaming a saved search in YouTrack stops losing its pin.
+// Memory only: the next `f` persists the result, and an entry that matches
+// nothing is left alone rather than dropped.
+func (m *Model) migrateFavorites() {
+	p := &m.cfg.Providers[m.provider]
+	ids := make(map[string]bool, len(m.savedQueries))
+	byName := make(map[string]string, len(m.savedQueries))
+	for _, q := range m.savedQueries {
+		ids[q.ID] = true
+		byName[q.Name] = q.ID
+	}
+	for i, f := range p.Favorites {
+		if ids[f] {
+			continue
+		}
+		if id, ok := byName[f]; ok {
+			p.Favorites[i] = id
+		}
+	}
+}
+
+// setIssueItems rebuilds the issue list from every page fetched so far.
+func (m *Model) setIssueItems() tea.Cmd {
+	fields := m.cfg.Providers[m.provider].ListFields
+	items := make([]list.Item, 0, len(m.allIssues))
+	for _, iss := range m.allIssues {
+		items = append(items, issueItem{issue: iss, fields: fields})
+	}
+	return m.issues.SetItems(items)
+}
+
 // toggleFavorite pins or unpins the selected filter and persists it. Matching
-// is by name because that is what the user sees; a saved search sharing a name
-// with a built-in toggles both.
+// is by ID, so renaming a saved search in YouTrack keeps its pin and two
+// searches sharing a name stay independent.
 func (m *Model) toggleFavorite() tea.Cmd {
 	it, ok := m.filters.SelectedItem().(filterItem)
 	if !ok {
 		return nil
 	}
 	p := &m.cfg.Providers[m.provider]
-	if i := slices.Index(p.Favorites, it.Name); i >= 0 {
+	if i := slices.Index(p.Favorites, it.ID); i >= 0 {
 		p.Favorites = slices.Delete(p.Favorites, i, i+1)
 	} else {
-		p.Favorites = append(p.Favorites, it.Name)
+		p.Favorites = append(p.Favorites, it.ID)
 	}
 	if err := m.saveConfig(); err != nil {
 		m.dlg = infoDialog("Config not saved", err.Error())
@@ -401,7 +490,7 @@ func (m *Model) toggleFavorite() tea.Cmd {
 	// Follow the item to its new position instead of resetting to the top:
 	// pinning moves it, the cursor should go with it.
 	for i, li := range m.filters.Items() {
-		if f, ok := li.(filterItem); ok && f.Name == it.Name {
+		if f, ok := li.(filterItem); ok && f.ID == it.ID {
 			m.filters.Select(i)
 			break
 		}
@@ -497,6 +586,12 @@ func (m *Model) submitSetup() tea.Cmd {
 
 // forward hands the message to whichever sub-model owns the current screen.
 func (m *Model) forward(msg tea.Msg) tea.Cmd {
+	// The prompt floats above the screens, so it takes precedence — this is
+	// also what lets a query be pasted in.
+	if m.prompt.active {
+		return m.prompt.update(msg)
+	}
+
 	var cmd tea.Cmd
 	switch m.screen {
 	case screenSetup:
@@ -512,8 +607,9 @@ func (m *Model) forward(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) layout() {
-	body := max(1, m.h-3)
+	body := max(1, m.h-3-m.prompt.lines())
 	m.setup.setWidth(m.w)
+	m.prompt.setWidth(m.w)
 	m.filters.SetSize(m.w, body)
 	m.issues.SetSize(m.w, body)
 	m.detail.SetWidth(m.w)
@@ -545,7 +641,13 @@ func (m *Model) View() tea.View {
 		body = m.detail.View()
 	}
 
-	screen := lipgloss.JoinVertical(lipgloss.Left, m.header(), body, m.footer())
+	rows := []string{m.header()}
+	if m.prompt.active {
+		rows = append(rows, m.prompt.view())
+	}
+	rows = append(rows, body, m.footer())
+
+	screen := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	if m.dlg != nil {
 		screen = overlay(screen, m.dlg.view(m.w), m.w, m.h)
 	}
@@ -589,6 +691,9 @@ func (m *Model) footer() string {
 		// leaves the hint peeking out beside the box.
 		return ""
 	}
+	if m.prompt.active {
+		return styDim.Render("enter  run the query  ·  esc  cancel")
+	}
 	return m.help.View(screenKeys{m.keys, m.screen})
 }
 
@@ -605,8 +710,9 @@ type filtersMsg struct {
 }
 
 type issuesMsg struct {
-	gen    int
-	issues []youtrack.Issue
+	gen      int
+	issues   []youtrack.Issue
+	appendTo bool // a further page, not a fresh query
 }
 
 type detailMsg struct {
@@ -635,14 +741,27 @@ func (m *Model) loadFilters() tea.Cmd {
 }
 
 func (m *Model) loadIssues(query string) tea.Cmd {
+	m.query = query
+	return m.fetchIssues(query, 0, false)
+}
+
+// loadMoreIssues fetches the page after everything already on screen.
+func (m *Model) loadMoreIssues() tea.Cmd {
+	if !m.moreIssues || m.query == "" {
+		return nil
+	}
+	return m.fetchIssues(m.query, len(m.allIssues), true)
+}
+
+func (m *Model) fetchIssues(query string, skip int, appendTo bool) tea.Cmd {
 	c, gen := m.begin()
 	top := m.cfg.PageSize
 	return func() tea.Msg {
-		issues, err := c.Issues(context.Background(), query, top)
+		issues, err := c.Issues(context.Background(), query, skip, top)
 		if err != nil {
 			return errMsg{gen, err}
 		}
-		return issuesMsg{gen, issues}
+		return issuesMsg{gen, issues, appendTo}
 	}
 }
 

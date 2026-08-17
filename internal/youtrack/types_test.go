@@ -58,9 +58,11 @@ func TestLinkLabel(t *testing.T) {
 }
 
 func TestClientGET(t *testing.T) {
-	var gotMethod, gotAuth, gotQuery string
+	var gotMethod, gotAuth, gotQuery, gotSkip, gotTop string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotAuth, gotQuery = r.Method, r.Header.Get("Authorization"), r.URL.Query().Get("query")
+		q := r.URL.Query()
+		gotMethod, gotAuth, gotQuery = r.Method, r.Header.Get("Authorization"), q.Get("query")
+		gotSkip, gotTop = q.Get("$skip"), q.Get("$top")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[{"idReadable":"PRJ-1","summary":"hi"}]`))
 	}))
@@ -70,7 +72,7 @@ func TestClientGET(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	issues, err := c.Issues(t.Context(), "#Unresolved", 10)
+	issues, err := c.Issues(t.Context(), "#Unresolved", 50, 10)
 	if err != nil {
 		t.Fatalf("Issues: %v", err)
 	}
@@ -79,6 +81,9 @@ func TestClientGET(t *testing.T) {
 	}
 	if gotAuth != "Bearer perm:tok" || gotQuery != "#Unresolved" {
 		t.Errorf("auth=%q query=%q", gotAuth, gotQuery)
+	}
+	if gotSkip != "50" || gotTop != "10" {
+		t.Errorf("paging: $skip=%q $top=%q, want 50 and 10", gotSkip, gotTop)
 	}
 	if len(issues) != 1 || issues[0].ID != "PRJ-1" {
 		t.Errorf("issues = %+v", issues)
