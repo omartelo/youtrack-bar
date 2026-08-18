@@ -156,7 +156,7 @@ func renderIssue(c *youtrack.Client, iss *youtrack.Issue, comments []youtrack.Co
 	if s := renderLinks(c, iss.Links); s != "" {
 		b.WriteString(section("Links", s))
 	}
-	b.WriteString(section(fmt.Sprintf("Comments (%d)", len(comments)), renderComments(c, comments, md)))
+	b.WriteString(section(fmt.Sprintf("Comments (%d)", len(comments)), renderComments(c, comments, md, inner-2)))
 	return b.String()
 }
 
@@ -215,14 +215,14 @@ func renderLinks(c *youtrack.Client, ls []youtrack.Link) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func renderComments(c *youtrack.Client, cs []youtrack.Comment, md func(string) string) string {
+func renderComments(c *youtrack.Client, cs []youtrack.Comment, md func(string) string, width int) string {
 	if len(cs) == 0 {
 		return styDim.Render("(none)")
 	}
 	var b strings.Builder
 	for i, cm := range cs {
 		if i > 0 {
-			b.WriteString("\n")
+			b.WriteString("\n" + styRule.Render(strings.Repeat("─", width)) + "\n")
 		}
 		b.WriteString(styAuthor.Render(fallback(cm.Author.String(), "—")))
 		b.WriteString(styDim.Render("  "+relTime(cm.Created)) + "\n")

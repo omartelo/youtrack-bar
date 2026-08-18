@@ -100,19 +100,26 @@ func TestRenderComments(t *testing.T) {
 	c := testClient(t)
 	md := func(s string) string { return s }
 
-	if got := plain(renderComments(c, nil, md)); !strings.Contains(got, "(none)") {
+	if got := plain(renderComments(c, nil, md, 32)); !strings.Contains(got, "(none)") {
 		t.Errorf("no comments rendered %q", got)
 	}
 
 	out := plain(renderComments(c, []youtrack.Comment{
-		{Text: "first", Author: &youtrack.User{FullName: "Ana Souza"}, Created: time.Now().UnixMilli()},
+		{Text: "first paragraph\n\nlast paragraph", Author: &youtrack.User{FullName: "Ana Souza"}, Created: time.Now().UnixMilli()},
 		{Text: "second, no author"}, // author can be null on the API
-	}, md))
+	}, md, 32))
 	if !strings.Contains(out, "Ana Souza") || !strings.Contains(out, "first") {
 		t.Errorf("comment missing: %q", out)
 	}
 	if !strings.Contains(out, "second, no author") {
 		t.Errorf("a comment with a nil author was dropped: %q", out)
+	}
+	divider := strings.Repeat("─", 32)
+	if got := strings.Count(out, divider); got != 1 {
+		t.Errorf("comment divider count = %d, want 1:\n%s", got, out)
+	}
+	if !strings.Contains(out, "last paragraph\n\n"+divider+"\n—") {
+		t.Errorf("divider does not separate complete comments:\n%s", out)
 	}
 }
 
