@@ -23,12 +23,13 @@ jobs:
       - name: Compose release notes
         run: |
           version="${GITHUB_REF_NAME#v}"
+          notes="${RUNNER_TEMP}/release-notes.md"
           awk -v ver="$version" '
             $0 ~ "^## \\[" ver "\\]" { grab = 1; next }
             grab && (/^## \[/ || /^\[[^]]+\]:/) { exit }
             grab { print }
-          ' CHANGELOG.md > release-notes.md
-          if [ ! -s release-notes.md ]; then
+          ' CHANGELOG.md > "$notes"
+          if [ ! -s "$notes" ]; then
             echo "missing CHANGELOG.md entry for ${version}" >&2
             exit 1
           fi
@@ -36,7 +37,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes release-notes.md
+          args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
