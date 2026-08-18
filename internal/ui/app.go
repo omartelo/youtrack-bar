@@ -55,6 +55,12 @@ type Model struct {
 	// dlg is the modal error popup. Non-nil means it owns the keyboard.
 	dlg *dialog
 
+	// newVersion is the tag of a release newer than this binary, empty until
+	// the startup check says otherwise. It only ever gets shown in the header:
+	// the TUI is read-only about itself too, and `youtrack-tui update` is what
+	// installs anything.
+	newVersion string
+
 	// savePending means the config is written as soon as a request succeeds:
 	// no point persisting a token that does not work. config.Save is what
 	// keeps ${VAR} references intact.
@@ -162,7 +168,15 @@ func (m *Model) Init() tea.Cmd {
 	if m.screen == screenSetup {
 		return tea.Batch(m.spin.Tick, m.setup.focusOn(fieldName))
 	}
-	return tea.Batch(m.spin.Tick, m.loadFilters())
+	return tea.Batch(m.spin.Tick, m.loadFilters(), m.checkUpdateCmd())
+}
+
+// checkUpdateCmd is the startup update check, unless the config turned it off.
+func (m *Model) checkUpdateCmd() tea.Cmd {
+	if !m.cfg.ShouldCheckUpdates() {
+		return nil
+	}
+	return checkUpdate()
 }
 
 // Update implements tea.Model.
@@ -207,6 +221,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The watch list resolves IDs against these, so the poller can only
 		// start once they have arrived.
 		return m, tea.Batch(m.setFilterItems(), m.startWatch())
+
+	case updateMsg:
+		m.newVersion = msg.tag
+		return m, nil
 
 	case issuesMsg:
 		if msg.gen != m.gen {
@@ -720,6 +738,12 @@ func (m *Model) header() string {
 			style, label = styWatchFail, fmt.Sprintf("◉ watching %d (failed)", n)
 		}
 		left += " " + style.Render(label)
+	}
+
+	if m.newVersion != "" {
+		// Ambient, like the watch counter: it says a newer release exists and
+		// names the command that installs it, and nothing about it interrupts.
+		left += " " + styUpdate.Render("↑ "+m.newVersion+" — run `youtrack-tui update`")
 	}
 
 	var right string

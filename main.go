@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,12 +13,29 @@ import (
 
 	"github.com/omartelo/youtrack-tui/internal/config"
 	"github.com/omartelo/youtrack-tui/internal/ui"
+	"github.com/omartelo/youtrack-tui/internal/update"
 )
 
 func main() {
+	// `update` is the one subcommand, taken before the flag set so that it
+	// does not have to be declared as a flag on the TUI.
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		if err := update.Run(context.Background(), os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "youtrack-tui:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	path := flag.String("config", config.DefaultPath(), "path to config.yml")
 	provider := flag.String("provider", "", "provider name (defaults to the first one)")
+	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	if *version {
+		fmt.Println("youtrack-tui", update.Version)
+		return
+	}
 
 	if err := run(*path, *provider); err != nil {
 		fmt.Fprintln(os.Stderr, "youtrack-tui:", err)

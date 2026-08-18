@@ -26,6 +26,11 @@ internal/ui/query.go         raw-query prompt (`s`)
 internal/ui/dialog.go        modal error popup and the layer overlay
 internal/ui/browser.go       handing a URL to the desktop (`o`)
 internal/ui/notify.go        background watcher and the notification command
+internal/ui/update.go        the startup release check and its message
+internal/update/update.go    GitHub release lookup and version comparison
+internal/update/manager.go   which package manager owns this binary, if any
+internal/update/apply.go     download, checksum, unpack, replace
+internal/update/run.go       `youtrack-tui update` end to end
 internal/ui/requests.go      every call to a YouTrack instance and its messages
 internal/ui/render.go        styles, list items, issue detail composition
 internal/ui/keys.go          key bindings and per-screen help
@@ -161,6 +166,28 @@ These are not style preferences. Breaking any one of them breaks the product.
 18. **`internal/ui` does not speak HTTP and `internal/youtrack` does not speak
     lipgloss.** The client returns data; the UI decides color and layout.
 
+19. **A package-managed binary is never replaced in place.** `update.Run`
+    calls `DetectManager` before `Apply`: a file under Homebrew's Cellar or
+    Caskroom, or one pacman reports as owned, is upgraded by running that
+    manager. Overwriting it would leave the manager holding a version that is
+    not there and its next upgrade would put the old binary back. See
+    `TestHomebrewInstallIsDelegated`.
+
+20. **Elevation is asked for out loud, and never by us.** The AUR helper runs
+    unprivileged — `paru` and `yay` refuse to run as root — and elevates for
+    the install step alone. We point it at `pkexec` (`--sudo pkexec
+    --nosudoloop`) so the password lands in a polkit dialog naming what it
+    authorises, and `Run` prints what is about to happen first: a password
+    prompt nobody announced is indistinguishable from a phishing attempt.
+    Homebrew owns its prefix and is elevated for nothing.
+
+21. **The release check runs once, at startup, and cannot raise anything.**
+    `Init` fires it; there is no tick, no retry and no second request. A
+    failure, a rate limit and an up-to-date binary all return a nil message —
+    same rule as a background watch poll, for the same reason. A build that
+    does not know its own version (`dev`) is never told it is behind. See
+    `TestUpdateCheckIsOnlyScheduledAtStartup`.
+
 ## Known ceilings
 
 Deliberate simplifications. Each one has its upgrade path written down. None
@@ -259,6 +286,18 @@ of them needs "fixing" before somebody actually complains.
   *Upgrade:* store the certificate fingerprint and verify against it, which is
   what accepting once should really mean.
 
+- **Update detection is one GitHub call per launch, unauthenticated.** A
+  machine behind a shared IP can hit the 60/hour limit, and the check then
+  quietly reports nothing. `check_updates: false` turns it off. *Upgrade:*
+  cache the answer with a timestamp so a relaunch inside the hour skips the
+  request.
+
+- **The updater only knows Homebrew and pacman.** Scoop, winget, nix and a
+  distro package someone else built all read as unmanaged and get the
+  self-replacing path — which for a root-owned file fails on the write rather
+  than doing damage. *Upgrade:* ask each manager whether it owns the path, at
+  the cost of a process spawn per manager.
+
 - **`ca_file` is not watched.** A rotated CA bundle is picked up on the next
   launch, not live. Fine; restarting a TUI is cheap.
 
@@ -276,7 +315,7 @@ the targets.
 task check                    # lint + test, what CI runs
 task test                     # go test -race ./...
 task cover                    # coverage summary
-task build                    # bin/youtrack-tui, skipped when sources are unchanged
+task build                    # bin/youtrack-tui, stamped with `git describe`
 task run -- -provider acme    # build then run; `interactive: true` keeps the TUI usable
 task fmt tidy clean install
 ```

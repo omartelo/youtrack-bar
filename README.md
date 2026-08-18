@@ -113,6 +113,37 @@ issues that were already there, so a restart is quiet even though `w` is
 remembered: it writes the config, and `watch:` is what the next run picks up.
 Only the active provider is polled.
 
+## Updating
+
+The TUI checks GitHub for a newer release once, when it opens, and says so in
+the header. It never installs anything on its own — `youtrack-tui update` does
+that:
+
+```sh
+youtrack-tui update      # check, then install
+youtrack-tui -version    # what this binary is
+```
+
+If the binary came from a package manager, `update` runs that manager instead
+of overwriting its file — replacing it would leave the manager holding a
+version that is not there, and its next upgrade would put the old one back:
+
+| Installed with            | What `update` runs                          |
+|---------------------------|---------------------------------------------|
+| Homebrew tap              | `brew upgrade --cask omartelo/tap/youtrack-tui` |
+| AUR (`youtrack-tui-bin`)  | `paru -S youtrack-tui-bin` (or `yay`)       |
+| `install.sh`, tarball, `go install` | replaces the binary in place, after checking its SHA-256 against the release's `checksums.txt` |
+
+The AUR helper runs as you, not as root, and is pointed at `pkexec` for the
+install step, so the password is asked for in a polkit dialog rather than at a
+prompt underneath the output. What is about to run is printed before it runs.
+
+To stop the startup check:
+
+```yaml
+check_updates: false
+```
+
 ## Develop
 
 [Task](https://taskfile.dev) drives everything; run `task` for the full list.

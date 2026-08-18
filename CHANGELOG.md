@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `youtrack-tui update` installs the latest release, and the TUI reports one in
+  the header after a single check at startup (`check_updates: false` turns that
+  off). A binary installed through the Homebrew tap or the AUR is upgraded by
+  running that manager rather than being overwritten; the AUR helper is pointed
+  at `pkexec`, so elevation goes through a polkit dialog.
+- `youtrack-tui -version`, and a version stamped into release builds.
+
 ### Changed
 
 - `w` now persists the watch list to the config, the way `f` does for

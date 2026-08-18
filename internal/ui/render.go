@@ -31,6 +31,10 @@ var (
 	styWatch     = lipgloss.NewStyle().Foreground(lipgloss.Color("44"))
 	styWatchFail = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
 
+	// A new release is news, not a warning: dim enough to ignore while
+	// reading, legible enough to notice on the way past.
+	styUpdate = lipgloss.NewStyle().Foreground(lipgloss.Color("140"))
+
 	styQueryLabel = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("62"))
 
