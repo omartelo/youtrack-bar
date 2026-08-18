@@ -11,6 +11,11 @@ watch_interval: 2m
 # or none to stay quiet.
 notifier: zenity
 
+# The TUI asks GitHub for a newer release once at startup and reports it in the
+# header; `youtrack-tui update` is what installs one. Set to false to stay off
+# the network entirely.
+check_updates: true
+
 providers:
   - name: acme
     url: https://acme.youtrack.cloud

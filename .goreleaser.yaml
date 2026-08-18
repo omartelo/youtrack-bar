@@ -17,7 +17,9 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w
+      # The version is what `youtrack-tui update` compares against the latest
+      # release; an unstamped build says "dev" and never offers an update.
+      - -s -w -X github.com/omartelo/youtrack-tui/internal/update.Version=v{{ .Version }}
     # Same tag, same bytes: without this every rebuild stamps the current time
     # into the binary and the checksums move.
     mod_timestamp: "{{ .CommitTimestamp }}"

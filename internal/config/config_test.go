@@ -143,3 +143,33 @@ func TestParseRejects(t *testing.T) {
 		}
 	}
 }
+
+// `check_updates: false` has to survive a Save, or the startup request comes
+// back on the next write — and the config is written by several features.
+func TestSaveKeepsTheUpdateCheckOff(t *testing.T) {
+	c, err := Parse([]byte(`
+check_updates: false
+providers:
+  - name: acme
+    url: https://acme.youtrack.cloud
+    token: perm:tok
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ShouldCheckUpdates() {
+		t.Fatal("check_updates: false was not read")
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yml")
+	if err := Save(path, c); err != nil {
+		t.Fatal(err)
+	}
+	back, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.ShouldCheckUpdates() {
+		t.Error("saving the config turned the update check back on")
+	}
+}

@@ -84,7 +84,19 @@ type Config struct {
 	// WatchEvery is WatchInterval parsed.
 	WatchEvery time.Duration `yaml:"-"`
 
+	// CheckUpdates turns the startup release check off. A pointer so that
+	// absent means on and `check_updates: false` survives a Save — the zero
+	// value of a bool cannot tell those two apart.
+	CheckUpdates *bool `yaml:"check_updates,omitempty"`
+
 	Providers []Provider `yaml:"providers"`
+}
+
+// ShouldCheckUpdates reports whether to ask GitHub for a newer release on
+// startup. On unless the config says otherwise: the check is one request, it
+// never blocks anything, and a release nobody hears about is not much of one.
+func (c *Config) ShouldCheckUpdates() bool {
+	return c == nil || c.CheckUpdates == nil || *c.CheckUpdates
 }
 
 // DefaultPath is $XDG_CONFIG_HOME/youtrack-tui/config.yml.

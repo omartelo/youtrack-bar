@@ -2,6 +2,11 @@ version: "3"
 
 vars:
   BIN: bin/youtrack-tui
+  # The tag this working tree sits exactly on, or "dev". Deliberately not
+  # `git describe`: its v0.2.0-1-gabc form is a pre-release by semver rules, so
+  # a build one commit *ahead* of a tag would be offered that tag as an update.
+  VERSION:
+    sh: git describe --tags --exact-match 2>/dev/null || echo dev
 
 tasks:
   default:
@@ -14,7 +19,9 @@ tasks:
     sources: ["**/*.go", go.mod, go.sum]
     generates: ["{{.BIN}}"]
     cmds:
-      - go build -o {{.BIN}} .
+      # Stamped the same way GoReleaser does, so a local build reports the tag
+      # it was built from rather than "dev".
+      - go build -ldflags "-X github.com/omartelo/youtrack-tui/internal/update.Version={{.VERSION}}" -o {{.BIN}} .
 
   run:
     desc: "Run the TUI — task run -- -provider acme"
