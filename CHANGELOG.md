@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-18
+
 ### Added
 
-- `youtrack-tui update` installs the latest release, and the TUI reports one in
-  the header after a single check at startup (`check_updates: false` turns that
-  off). A binary installed through the Homebrew tap or the AUR is upgraded by
-  running that manager rather than being overwritten; the AUR helper is pointed
-  at `pkexec`, so elevation goes through a polkit dialog.
+- `youtrack-tui update` installs the latest release. The download is verified
+  against the release's `checksums.txt` before it replaces anything.
+- A binary installed through the Homebrew tap or the AUR is upgraded by running
+  that package manager instead of being overwritten, which would leave the
+  manager holding a version that is no longer on disk. The AUR helper runs
+  unprivileged and is pointed at `pkexec`, so the password is asked for in a
+  polkit dialog naming what it authorises; the command is printed before it
+  runs.
+- The TUI checks GitHub for a newer release once at startup and reports it in
+  the header. It installs nothing on its own, never retries, and stays silent
+  on a failure or a rate limit. `check_updates: false` turns the check off.
 - `youtrack-tui -version`, and a version stamped into release builds.
 
 ### Changed
@@ -54,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AUR package.
 - GitHub CI with tests, race detection, golangci-lint, and release packaging.
 
-[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/omartelo/youtrack-tui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/omartelo/youtrack-tui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/omartelo/youtrack-tui/releases/tag/v0.1.0

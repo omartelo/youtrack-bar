@@ -89,6 +89,8 @@ exclusive.
 youtrack-tui                       # first provider in the config
 youtrack-tui -provider acme        # a specific one
 youtrack-tui -config ./config.yml  # a specific config file
+youtrack-tui update                # install the latest release
+youtrack-tui -version              # what this binary is
 ```
 
 ## Watching filters
@@ -149,7 +151,7 @@ check_updates: false
 [Task](https://taskfile.dev) drives everything; run `task` for the full list.
 
 ```sh
-task check                    # lint + test
+task check                    # lint, tests, installer smoke test
 task run -- -provider acme    # build and launch
 task cover                    # coverage summary
 ```
