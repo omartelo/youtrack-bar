@@ -109,9 +109,9 @@ providers:
 ```
 
 The first poll of a filter only seeds — starting the program never announces
-issues that were already there. Nothing about watching is persisted: `watch:`
-seeds the session, `w` changes it for that session only, and a restart starts
-over. Only the active provider is polled.
+issues that were already there, so a restart is quiet even though `w` is
+remembered: it writes the config, and `watch:` is what the next run picks up.
+Only the active provider is polled.
 
 ## Develop
 

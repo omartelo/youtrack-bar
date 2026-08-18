@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `w` now persists the watch list to the config, the way `f` does for
+  favourites: what was being watched when you quit is what the next run polls.
+  What has already been seen is still session state, so a restart stays quiet.
+
 ## [0.2.0] - 2026-08-18
 
 ### Changed

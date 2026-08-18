@@ -47,10 +47,10 @@ type Provider struct {
 	// next pin.
 	Favorites []string `yaml:"favorites,omitempty"`
 
-	// Watch seeds the saved-search IDs polled in the background for new
-	// issues. It is read, never written: `w` changes the watch list for the
-	// session only, so a background poller can be turned on and off without
-	// rewriting the file.
+	// Watch are the saved-search IDs polled in the background for new issues,
+	// in the order they were turned on. Like Favorites it is ours to write:
+	// `w` toggles a filter and persists the result, so what you were watching
+	// is what you come back to.
 	Watch []string `yaml:"watch,omitempty"`
 
 	// CAFile is a PEM bundle to trust on top of the system roots — the right
@@ -179,9 +179,9 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("provider %q: `token` is empty (unset environment variable?)", p.Name)
 		}
 
-		p.Favorites = slices.DeleteFunc(p.Favorites, func(f string) bool {
-			return strings.TrimSpace(f) == ""
-		})
+		blank := func(f string) bool { return strings.TrimSpace(f) == "" }
+		p.Favorites = slices.DeleteFunc(p.Favorites, blank)
+		p.Watch = slices.DeleteFunc(p.Watch, blank)
 
 		p.RawCAFile = strings.TrimSpace(p.CAFile)
 		p.CAFile = strings.TrimSpace(os.ExpandEnv(p.RawCAFile))
