@@ -18,11 +18,80 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
+    # Same tag, same bytes: without this every rebuild stamps the current time
+    # into the binary and the checksums move.
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
+  # tar.gz on Windows too, on purpose: install.sh runs under Git Bash and
+  # unpacks with tar. Switching Windows to zip would break it.
   - formats:
       - tar.gz
     name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt
+
+changelog:
+  # The notes come from CHANGELOG.md via --release-notes; a generated commit
+  # log would only be built and thrown away.
+  disable: true
+
+# Cask, not formula: `brews` is hard-deprecated as of GoReleaser v2.16 and
+# `goreleaser check` fails on it. Casks are macOS-only — Homebrew on Linux does
+# not install them — so Linux is served by the AUR package and install.sh.
+#
+# HOMEBREW_TAP_SSH_KEY is a deploy key with write access on omartelo/homebrew-tap
+# — GITHUB_TOKEN is scoped to this repository and cannot push to another one.
+homebrew_casks:
+  - name: youtrack-tui
+    directory: Casks
+    repository:
+      owner: omartelo
+      name: homebrew-tap
+      git:
+        url: git@github.com:omartelo/homebrew-tap.git
+        private_key: "{{ .Env.HOMEBREW_TAP_SSH_KEY }}"
+    binaries:
+      - youtrack-tui
+    homepage: https://github.com/omartelo/youtrack-tui
+    description: Read-only terminal UI for browsing YouTrack issues
+    license: MIT
+    commit_author:
+      name: omartelo
+      email: meopedevts@proton.me
+    url:
+      # Tells Homebrew the download host is the project's own repository, which
+      # is what keeps `brew audit` from flagging the cask as unverified.
+      verified: github.com/omartelo/youtrack-tui
+    hooks:
+      post:
+        # The binary is not notarized, so Gatekeeper quarantines it and the
+        # first run dies with "cannot be opened". Nothing else clears that.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/youtrack-tui"]
+          end
+
+# GoReleaser renders the PKGBUILD and the .SRCINFO from the release assets it
+# just published and pushes both over SSH; nothing here needs makepkg.
+aurs:
+  - name: youtrack-tui-bin
+    homepage: https://github.com/omartelo/youtrack-tui
+    description: Read-only terminal UI for browsing YouTrack issues
+    license: MIT
+    maintainers:
+      - "omartelo <meopedevts at proton dot me>"
+    private_key: "{{ .Env.AUR_SSH_PRIVATE_KEY }}"
+    git_url: ssh://aur@aur.archlinux.org/youtrack-tui-bin.git
+    provides:
+      - youtrack-tui
+    conflicts:
+      - youtrack-tui
+    commit_author:
+      name: omartelo
+      email: meopedevts@proton.me
+    package: |
+      install -Dm755 "./youtrack-tui" "${pkgdir}/usr/bin/youtrack-tui"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
