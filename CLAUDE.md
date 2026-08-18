@@ -23,6 +23,7 @@ internal/youtrack/types.go   API types + dynamic custom-field rendering
 internal/ui/app.go           root bubbletea model (4 screens, one state machine)
 internal/ui/setup.go         first-run configuration form
 internal/ui/query.go         raw-query prompt (`s`)
+internal/ui/sort.go          the `sort by:` clause pushed onto issue queries
 internal/ui/dialog.go        modal error popup and the layer overlay
 internal/ui/browser.go       handing a URL to the desktop (`o`)
 internal/ui/notify.go        background watcher and the notification command
@@ -217,6 +218,14 @@ of them needs "fixing" before somebody actually complains.
   surviving a rename at the cost of readability: `- 145-3` says nothing to
   someone editing the file by hand. *Upgrade:* an `{id, name}` mapping, which
   needs a custom `UnmarshalYAML` to keep reading the two older formats.
+
+- **Sorting offers built-in fields only.** `S` cycles `updated` and `created`,
+  both directions, because those two exist on every instance — a custom field
+  does not, and the field list is dynamic by invariant 6. `sort by: Priority
+  desc` is typed into the `s` prompt instead, and survives the cycle as long as
+  it is left on the filter's own order. The choice is per session and not
+  persisted, like the query it decorates. *Upgrade:* a `sort_options:` list on
+  the provider, the same knob `list_fields` already is.
 
 - **A raw query is not saved anywhere.** `s` runs it for the session; it is
   gone on restart and cannot be pinned, because `favorites` records IDs and an

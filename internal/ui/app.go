@@ -75,6 +75,10 @@ type Model struct {
 	allIssues  []youtrack.Issue
 	moreIssues bool
 
+	// sortBy indexes sortOrders: the `sort by:` clause pushed onto every issue
+	// query. Session-only, like the query itself.
+	sortBy int
+
 	query    string
 	current  *youtrack.Issue
 	comments []youtrack.Comment
@@ -371,6 +375,18 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.prompt.open(m.query)
 		m.layout()
 		return m, cmd
+
+	case key.Matches(msg, m.keys.Sort):
+		if m.screen != screenFilters && m.screen != screenIssues {
+			return m, nil
+		}
+		m.sortBy = (m.sortBy + 1) % len(sortOrders)
+		if m.screen != screenIssues || m.query == "" {
+			return m, nil
+		}
+		// Ordering is the instance's job: what is on screen is one window onto
+		// the result set, so the query is run again from the first page.
+		return m, m.loadIssues(m.query)
 
 	case key.Matches(msg, m.keys.Favorite):
 		if m.screen != screenFilters {
@@ -738,6 +754,12 @@ func (m *Model) header() string {
 			style, label = styWatchFail, fmt.Sprintf("◉ watching %d (failed)", n)
 		}
 		left += " " + style.Render(label)
+	}
+
+	if clause := sortOrders[m.sortBy]; clause != "" {
+		// Exactly what was appended to the query, not a prettier name for it:
+		// the same string works when typed into the `s` prompt.
+		left += " " + styDim.Render("sort by: "+clause)
 	}
 
 	if m.newVersion != "" {
