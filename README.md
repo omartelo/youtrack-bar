@@ -20,10 +20,10 @@ curl -fsSL https://raw.githubusercontent.com/omartelo/youtrack-tui/main/install.
 The installer verifies the GitHub release checksum and writes to
 `$HOME/.local/bin`. Override that directory with `INSTALL_DIR`.
 
-Homebrew works on macOS and Linux:
+Homebrew on macOS:
 
 ```sh
-brew install omartelo/tap/youtrack-tui
+brew install --cask omartelo/tap/youtrack-tui
 ```
 
 Arch Linux:

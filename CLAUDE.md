@@ -61,7 +61,10 @@ These are not style preferences. Breaking any one of them breaks the product.
    resolved to and leave it on disk. Code that clears `CAFile` must clear
    `RawCAFile` too, or Save resurrects it. See
    `TestSaveAfterLoadKeepsReferences`. `Save` writes 0600 inside a 0700
-   directory.
+   directory — on POSIX. Go maps a file mode to nothing but the read-only bit
+   on Windows, so the same call lands as 0666 there and `TestSaveRoundTrip`
+   skips that assertion; the reference-not-secret half of the invariant is
+   checked on every OS.
 
 4. **A missing config opens setup; a broken config still fails.** `main.run`
    only swallows `fs.ErrNotExist`. A file that exists but does not parse, or

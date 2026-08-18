@@ -1,5 +1,8 @@
 name: ci
 
+# Per-PR gate: lint on linux, the suite on every OS this project ships a binary
+# for, and a snapshot release so a broken packaging config fails the PR instead
+# of a tag.
 on:
   push:
     branches: [main]
@@ -12,35 +15,76 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # v2 reports formatter diffs as findings, so this is also the gofmt gate
+      # — see the formatters block in .golangci.yml.
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12
+          version: v2.12.2
 
-  test:
-    runs-on: ubuntu-latest
+  suite:
+    name: test (${{ matrix.os }})
+    strategy:
+      # One red OS still reports the others rather than cancelling them.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # git-bash on Windows keeps these steps byte-identical across the matrix.
+        shell: bash
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # Running the suite natively on all three is also what proves each target
+      # still compiles, including the _test.go files behind OS build tags.
       - run: go test -race ./...
-      - run: sh scripts/test-install.sh
+      # Windows only: Git Bash curl has no file:// transport, which is how the
+      # smoke test serves its fake release.
+      - if: runner.os != 'Windows'
+        run: sh scripts/test-install.sh
+
+  # main's branch protection requires the contexts "lint", "test" and "build".
+  # A matrix reports one check per leg — "test (ubuntu-latest)" and friends — and
+  # never a bare "test", so without this job the required check is one that can
+  # no longer exist and every merge blocks forever. Fanning in here keeps that
+  # list correct however the matrix grows.
+  test:
+    needs: suite
+    # Not if: success() — a skipped required check does not have to read as a
+    # failure, so the gate has to run and decide for itself.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every OS passed
+        run: |
+          result='${{ needs.suite.result }}'
+          echo "suite: $result"
+          [ "$result" = success ] || exit 1
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # --snapshot skips every publisher, so the cask and the PKGBUILD are
+      # rendered and validated here without either signing key. The cask
+      # resolves its private_key template while rendering, not while pushing, so
+      # the variable has to exist — empty is enough, nothing publishes.
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
           args: release --snapshot --clean
+        env:
+          HOMEBREW_TAP_SSH_KEY: ""

@@ -2,3 +2,39 @@ version: "2"
 
 run:
   timeout: 5m
+
+# The default set (errcheck, govet, ineffassign, staticcheck, unused) plus the
+# ones that catch what this codebase can actually get wrong: leaked response
+# bodies from the REST client, errors compared with == instead of errors.Is, a
+# tea.Cmd closure capturing a loop variable.
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+    - usestdlibvars
+  settings:
+    revive:
+      rules:
+        - name: unused-parameter
+          # bubbletea signatures carry parameters a given Update or View does
+          # not read; renaming them all to _ buys nothing.
+          disabled: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+
+# golangci-lint v2 reports formatter diffs as findings, so `golangci-lint run`
+# in CI is also the gofmt gate.
+formatters:
+  enable:
+    - gofmt
