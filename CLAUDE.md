@@ -1,4 +1,4 @@
-# youtrack-bar
+# youtrack-tui
 
 ## Objective
 
@@ -271,7 +271,7 @@ the targets.
 task check                    # lint + test, what CI runs
 task test                     # go test -race ./...
 task cover                    # coverage summary
-task build                    # bin/youtrack-bar, skipped when sources are unchanged
+task build                    # bin/youtrack-tui, skipped when sources are unchanged
 task run -- -provider acme    # build then run; `interactive: true` keeps the TUI usable
 task fmt tidy clean install
 ```

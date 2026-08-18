@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/config"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"

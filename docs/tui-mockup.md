@@ -18,11 +18,11 @@ Paste works: the terminal's own paste (`ctrl+shift+v`, middle-click, `cmd+v`)
 arrives as bracketed paste, and `ctrl+v` reads the system clipboard directly.
 
 ```
- youtrack-bar  setup                                                        first run
+ youtrack-tui  setup                                                        first run
 ────────────────────────────────────────────────────────────────────────────────────
 
   No config file yet — let's make one.
-  It will be written to /home/you/.config/youtrack-bar/config.yml with 0600 permissions.
+  It will be written to /home/you/.config/youtrack-tui/config.yml with 0600 permissions.
 
 ▌ Provider name
     acme
@@ -59,11 +59,11 @@ is a lipgloss layer, not a replacement.
 An untrusted certificate is the one error with an action attached:
 
 ```
- youtrack-bar  sankhya                                                      first run
+ youtrack-tui  sankhya                                                      first run
 ────────────────────────────────────────────────────────────────────────────────────
 
   No config file yet — let's make one.
-  It will be written to /home/you/.config/youtrack-bar/config.yml with 0600 permissions.
+  It will be written to /home/you/.config/youtrack-tui/config.yml with 0600 permissions.
 
   Provider na╭────────────────────────────────────────────────────────────────────╮
     sankhya  │                                                                    │
@@ -90,7 +90,7 @@ Press `i` and the retry goes through, the choice is written to the config, and
 the header carries the downgrade for the rest of the session:
 
 ```
- youtrack-bar  sankhya  !insecure                                       pick a filter
+ youtrack-tui  sankhya  !insecure                                       pick a filter
 ```
 
 Anything else is the same box with a plain title and only `esc  dismiss`:
@@ -115,7 +115,7 @@ The star sits in a two-column gutter every row reserves, so pinning something
 never shifts the list sideways.
 
 ```
- youtrack-bar  acme                                                    pick a filter
+ youtrack-tui  acme                                                    pick a filter
 ────────────────────────────────────────────────────────────────────────────────────
 
   FILTERS
@@ -148,7 +148,7 @@ the only place the glyph gets explained — and a poll that fails turns it orang
 rather than raising a modal over what is on screen.
 
 ```
- youtrack-bar  acme  ◉ watching 2                                      pick a filter
+ youtrack-tui  acme  ◉ watching 2                                      pick a filter
 ────────────────────────────────────────────────────────────────────────────────────
    Filters                                                                  5 items
 
@@ -165,7 +165,7 @@ rather than raising a modal over what is on screen.
 Failing that, the count says so and stays out of the way:
 
 ```
- youtrack-bar  acme  ◉ watching 2 (failed)                             pick a filter
+ youtrack-tui  acme  ◉ watching 2 (failed)                             pick a filter
 ```
 
 An issue that turns up in a watched filter raises one notification per filter
@@ -191,7 +191,7 @@ an existing one can be tweaked rather than retyped. It owns the keyboard while
 open — `for: me` contains four command keys.
 
 ```
- youtrack-bar  acme                                                    pick a filter
+ youtrack-tui  acme                                                    pick a filter
 ────────────────────────────────────────────────────────────────────────────────────
  query  project: PAY State: Open
 
@@ -211,7 +211,7 @@ built from `list_fields` in the config — those field names come from your
 instance, nothing is hardcoded.
 
 ```
- youtrack-bar  acme                                            for: me #Unresolved
+ youtrack-tui  acme                                            for: me #Unresolved
 ────────────────────────────────────────────────────────────────────────────────────
 
   ISSUES                                                                 23 issues
@@ -247,7 +247,7 @@ that is what the YouTrack card shows; every field the API returned is listed,
 in API order.
 
 ```
- youtrack-bar  acme                                                          PAY-1421
+ youtrack-tui  acme                                                          PAY-1421
 ────────────────────────────────────────────────────────────────────────────────────
 
   PAY-1421  Checkout retries duplicate the charge

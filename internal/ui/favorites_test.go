@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 func filterNames(m *Model) []string {

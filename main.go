@@ -1,4 +1,4 @@
-// Command youtrack-bar is a read-only terminal UI for browsing YouTrack issues.
+// Command youtrack-tui is a read-only terminal UI for browsing YouTrack issues.
 package main
 
 import (
@@ -10,8 +10,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
-	"github.com/omartelo/youtrack-bar/internal/ui"
+	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/ui"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	if err := run(*path, *provider); err != nil {
-		fmt.Fprintln(os.Stderr, "youtrack-bar:", err)
+		fmt.Fprintln(os.Stderr, "youtrack-tui:", err)
 		os.Exit(1)
 	}
 }

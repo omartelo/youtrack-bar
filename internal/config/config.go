@@ -1,4 +1,4 @@
-// Package config loads and validates the youtrack-bar YAML configuration.
+// Package config loads and validates the youtrack-tui YAML configuration.
 package config
 
 import (
@@ -87,13 +87,13 @@ type Config struct {
 	Providers []Provider `yaml:"providers"`
 }
 
-// DefaultPath is $XDG_CONFIG_HOME/youtrack-bar/config.yml.
+// DefaultPath is $XDG_CONFIG_HOME/youtrack-tui/config.yml.
 func DefaultPath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "config.yml"
 	}
-	return filepath.Join(dir, "youtrack-bar", "config.yml")
+	return filepath.Join(dir, "youtrack-tui", "config.yml")
 }
 
 // Load reads and validates the config file at path.

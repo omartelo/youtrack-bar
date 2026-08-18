@@ -1,4 +1,4 @@
-# youtrack-bar
+# youtrack-tui
 
 A read-only terminal UI for browsing YouTrack issues. Built with
 [Bubble Tea v2](https://charm.land/bubbletea/v2).
@@ -12,15 +12,15 @@ Nothing is ever written back to YouTrack.
 ## Install
 
 ```sh
-go install github.com/omartelo/youtrack-bar@latest
+go install github.com/omartelo/youtrack-tui@latest
 ```
 
 ## First run
 
-Just run it. With no config file, `youtrack-bar` opens a setup screen asking
+Just run it. With no config file, `youtrack-tui` opens a setup screen asking
 for a provider name, the instance URL and a permanent token. It verifies them
 against the API and only then writes
-`$XDG_CONFIG_HOME/youtrack-bar/config.yml` with `0600` permissions.
+`$XDG_CONFIG_HOME/youtrack-tui/config.yml` with `0600` permissions.
 
 Get a token under *Profile → Account Security → New permanent token* with the
 `YouTrack` scope — read access is enough.
@@ -28,7 +28,7 @@ Get a token under *Profile → Account Security → New permanent token* with th
 ## Configure by hand
 
 For a second provider, or to pick which fields show on the list, edit the file.
-Copy `config.example.yml` to `$XDG_CONFIG_HOME/youtrack-bar/config.yml`:
+Copy `config.example.yml` to `$XDG_CONFIG_HOME/youtrack-tui/config.yml`:
 
 ```yaml
 page_size: 50
@@ -69,9 +69,9 @@ exclusive.
 ## Run
 
 ```sh
-youtrack-bar                       # first provider in the config
-youtrack-bar -provider acme        # a specific one
-youtrack-bar -config ./config.yml  # a specific config file
+youtrack-tui                       # first provider in the config
+youtrack-tui -provider acme        # a specific one
+youtrack-tui -config ./config.yml  # a specific config file
 ```
 
 ## Watching filters

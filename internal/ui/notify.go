@@ -10,8 +10,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 // notifyLines is how many issues a notification names before it starts
@@ -167,7 +167,7 @@ func notifyNew(notifier, filter string, issues []youtrack.Issue) tea.Cmd {
 	if len(issues) == 0 {
 		return nil
 	}
-	title, body := fmt.Sprintf("youtrack-bar · %s", filter), notifyBody(issues)
+	title, body := fmt.Sprintf("youtrack-tui · %s", filter), notifyBody(issues)
 	return func() tea.Msg {
 		return notifiedMsg{err: notify(notifier, title, body)}
 	}
@@ -214,7 +214,7 @@ func notifyCommand(notifier, title, body string) (string, []string, error) {
 	case "", config.NotifierZenity:
 		return "zenity", []string{"--notification", "--text=" + title + "\n" + body}, nil
 	case config.NotifierNotifySend:
-		return "notify-send", []string{"--app-name=youtrack-bar", title, body}, nil
+		return "notify-send", []string{"--app-name=youtrack-tui", title, body}, nil
 	case config.NotifierNone:
 		return "", nil, nil
 	}
