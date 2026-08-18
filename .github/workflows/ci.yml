@@ -25,7 +25,8 @@ jobs:
         with:
           version: v2.12.2
 
-  test:
+  suite:
+    name: test (${{ matrix.os }})
     strategy:
       # One red OS still reports the others rather than cancelling them.
       fail-fast: false
@@ -48,6 +49,24 @@ jobs:
       # smoke test serves its fake release.
       - if: runner.os != 'Windows'
         run: sh scripts/test-install.sh
+
+  # main's branch protection requires the contexts "lint", "test" and "build".
+  # A matrix reports one check per leg — "test (ubuntu-latest)" and friends — and
+  # never a bare "test", so without this job the required check is one that can
+  # no longer exist and every merge blocks forever. Fanning in here keeps that
+  # list correct however the matrix grows.
+  test:
+    needs: suite
+    # Not if: success() — a skipped required check does not have to read as a
+    # failure, so the gate has to run and decide for itself.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every OS passed
+        run: |
+          result='${{ needs.suite.result }}'
+          echo "suite: $result"
+          [ "$result" = success ] || exit 1
 
   build:
     runs-on: ubuntu-latest
