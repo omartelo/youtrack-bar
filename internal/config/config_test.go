@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -28,12 +29,19 @@ func TestSaveRoundTrip(t *testing.T) {
 		t.Error("Save wrote the resolved secret instead of the ${VAR} reference")
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if mode := info.Mode().Perm(); mode != 0o600 {
-		t.Errorf("file mode = %o, want 600 — it holds a token", mode)
+	// POSIX only, on purpose. Confidentiality on Windows is an ACL, and Go's
+	// os package maps a mode to nothing there but the read-only bit, so
+	// WriteFile(0600) lands as 0666 however the file was created. The
+	// secret-leak check above is the part of the invariant that holds
+	// everywhere.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Errorf("file mode = %o, want 600 — it holds a token", mode)
+		}
 	}
 
 	out, err := Load(path)

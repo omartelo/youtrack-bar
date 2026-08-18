@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI runs the suite on Linux, macOS, and Windows, and golangci-lint now enforces
   gofmt plus `bodyclose`, `errorlint`, `nilerr`, and `revive`.
 
+### Fixed
+
+- `TestSaveRoundTrip` no longer asserts a 0600 config on Windows, where Go maps
+  a file mode to nothing but the read-only bit.
+
 ## [0.1.0] - 2026-08-18
 
 ### Added
