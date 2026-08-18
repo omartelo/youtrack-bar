@@ -1,0 +1,126 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./...
+      - run: sh scripts/test-install.sh
+      - name: Compose release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { grab = 1; next }
+            grab && (/^## \[/ || /^\[[^]]+\]:/) { exit }
+            grab { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "missing CHANGELOG.md entry for ${version}" >&2
+            exit 1
+          fi
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --release-notes release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  aur:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Render PKGBUILD
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt
+          sum() { awk -v file="$1" '$2 == file { print $1 }' checksums.txt; }
+          amd64="$(sum "youtrack-tui-${version}-linux-amd64.tar.gz")"
+          arm64="$(sum "youtrack-tui-${version}-linux-arm64.tar.gz")"
+          if [ -z "$amd64" ] || [ -z "$arm64" ]; then
+            echo "missing Linux checksums" >&2
+            exit 1
+          fi
+          sed -e "s/@VERSION@/${version}/g" \
+              -e "s/@SHA_AMD64@/${amd64}/" \
+              -e "s/@SHA_ARM64@/${arm64}/" \
+              build/aur/PKGBUILD.tpl > PKGBUILD
+          cat PKGBUILD
+      - name: Publish youtrack-tui-bin to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: youtrack-tui-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: omartelo
+          commit_email: meopedevts@proton.me
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Render Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt
+          sum() { awk -v file="$1" '$2 == file { print $1 }' checksums.txt; }
+          linux_amd64="$(sum "youtrack-tui-${version}-linux-amd64.tar.gz")"
+          linux_arm64="$(sum "youtrack-tui-${version}-linux-arm64.tar.gz")"
+          darwin_amd64="$(sum "youtrack-tui-${version}-darwin-amd64.tar.gz")"
+          darwin_arm64="$(sum "youtrack-tui-${version}-darwin-arm64.tar.gz")"
+          if [ -z "$linux_amd64" ] || [ -z "$linux_arm64" ] || \
+             [ -z "$darwin_amd64" ] || [ -z "$darwin_arm64" ]; then
+            echo "missing Homebrew checksums" >&2
+            exit 1
+          fi
+          sed -e "s/@VERSION@/${version}/g" \
+              -e "s/@SHA_LINUX_AMD64@/${linux_amd64}/" \
+              -e "s/@SHA_LINUX_ARM64@/${linux_arm64}/" \
+              -e "s/@SHA_DARWIN_AMD64@/${darwin_amd64}/" \
+              -e "s/@SHA_DARWIN_ARM64@/${darwin_arm64}/" \
+              build/homebrew/youtrack-tui.rb.tpl > youtrack-tui.rb
+          cat youtrack-tui.rb
+      - name: Publish formula to tap
+        env:
+          SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+        run: |
+          key="$(mktemp)"
+          printf '%s\n' "$SSH_KEY" > "$key"
+          chmod 600 "$key"
+          known="$(mktemp)"
+          ssh-keyscan -t ed25519 github.com > "$known" 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known"
+          git clone --depth 1 git@github.com:omartelo/homebrew-tap.git tap
+          mkdir -p tap/Formula
+          cp youtrack-tui.rb tap/Formula/youtrack-tui.rb
+          cd tap
+          git config user.name omartelo
+          git config user.email meopedevts@proton.me
+          git add Formula/youtrack-tui.rb
+          if git diff --cached --quiet; then
+            echo "formula already up to date"
+            exit 0
+          fi
+          git commit -m "youtrack-tui: update to ${GITHUB_REF_NAME}"
+          git push

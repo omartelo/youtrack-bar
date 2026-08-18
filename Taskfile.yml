@@ -31,6 +31,11 @@ tasks:
     cmds:
       - go test -race ./...
 
+  test:install:
+    desc: Smoke-test the curl installer
+    cmds:
+      - sh scripts/test-install.sh
+
   cover:
     desc: Test coverage summary
     cmds:
@@ -58,10 +63,11 @@ tasks:
       - go mod tidy
 
   check:
-    desc: What CI runs — lint then test
+    desc: What CI runs locally
     cmds:
       - task: lint
       - task: test
+      - task: test:install
 
   install:
     desc: Install youtrack-tui into GOBIN
