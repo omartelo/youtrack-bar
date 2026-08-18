@@ -8,8 +8,8 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 // press drives the model the way the runtime does: every command an Update

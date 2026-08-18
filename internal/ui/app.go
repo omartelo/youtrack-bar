@@ -14,8 +14,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 type screen int
@@ -706,7 +706,7 @@ func (m *Model) View() tea.View {
 }
 
 func (m *Model) header() string {
-	left := styTitle.Render(" youtrack-bar ") + styProvider.Render(" "+m.providerName()+" ")
+	left := styTitle.Render(" youtrack-tui ") + styProvider.Render(" "+m.providerName()+" ")
 	if m.insecure() {
 		// A downgraded connection stays on screen for as long as it is on.
 		left += styInsecure.Render(" !insecure ")

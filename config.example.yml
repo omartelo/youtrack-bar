@@ -1,4 +1,4 @@
-# youtrack-bar — copy to $XDG_CONFIG_HOME/youtrack-bar/config.yml
+# youtrack-tui — copy to $XDG_CONFIG_HOME/youtrack-tui/config.yml
 #
 # Never write the token in plain text here. Use ${VAR}: the value is expanded
 # from the environment when the file is loaded.

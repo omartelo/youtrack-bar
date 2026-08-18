@@ -9,7 +9,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 var (

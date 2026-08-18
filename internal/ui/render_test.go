@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 // plain drops the styling so an assertion is about the layout, not the colours.

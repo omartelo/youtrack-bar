@@ -6,8 +6,8 @@ import (
 
 	"charm.land/bubbles/v2/list"
 
-	"github.com/omartelo/youtrack-bar/internal/config"
-	"github.com/omartelo/youtrack-bar/internal/youtrack"
+	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 // launch hands the URL to a desktop-wide dispatcher, so the scheme is a trust

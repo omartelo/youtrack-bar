@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  BIN: bin/youtrack-bar
+  BIN: bin/youtrack-tui
 
 tasks:
   default:
@@ -64,7 +64,7 @@ tasks:
       - task: test
 
   install:
-    desc: Install youtrack-bar into GOBIN
+    desc: Install youtrack-tui into GOBIN
     cmds:
       - go install .
 
