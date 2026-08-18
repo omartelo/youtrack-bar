@@ -99,8 +99,9 @@ func TestNotifyBodyIsCapped(t *testing.T) {
 	}
 }
 
-// `w` is session state: it must never rewrite the config's watch list.
-func TestWatchToggleDoesNotTouchTheConfig(t *testing.T) {
+// `w` is remembered: what was being watched when the program closed is what it
+// polls on the next run. Matching is by ID for the same reason favourites are.
+func TestWatchTogglePersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	cfg := &config.Config{Providers: []config.Provider{{
 		Name: "acme", URL: "https://acme.youtrack.cloud", Token: "perm:tok",
@@ -132,17 +133,28 @@ func TestWatchToggleDoesNotTouchTheConfig(t *testing.T) {
 		t.Fatalf("session watch list = %v", m.watch.watching)
 	}
 
-	// Something else persists the config; the watch list must ride through
-	// unchanged rather than picking up the session's edits.
-	if err := m.saveConfig(); err != nil {
-		t.Fatal(err)
-	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "- 145-3") || strings.Contains(string(raw), "- 145-9") {
-		t.Errorf("`w` leaked into the config:\n%s", raw)
+	if strings.Contains(string(raw), "- 145-3") || !strings.Contains(string(raw), "- 145-9") {
+		t.Errorf("`w` was not persisted as IDs:\n%s", raw)
+	}
+	if got := cfg.Providers[0].Watch; len(got) != 1 || got[0] != "145-9" {
+		t.Errorf("watch list = %v, want just the filter still being watched", got)
+	}
+
+	// A reload sees exactly what was left running.
+	reloaded, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := New(reloaded, "", path)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if m2.watch.watching["145-3"] || !m2.watch.watching["145-9"] {
+		t.Errorf("watch list did not survive the restart: %v", m2.watch.watching)
 	}
 }
 

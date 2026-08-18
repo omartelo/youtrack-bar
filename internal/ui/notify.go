@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,16 +19,18 @@ import (
 // counting. A desktop popup is not a list view.
 const notifyLines = 3
 
-// watcher tracks what each watched filter has already reported. It is memory
-// only by design: a restart re-seeds and announces nothing, which beats being
-// greeted by fifty notifications for issues opened while you were away.
+// watcher tracks what each watched filter has already reported. What is being
+// watched is persisted; what has been seen is not, by design: a restart
+// re-seeds and announces nothing, which beats being greeted by fifty
+// notifications for issues opened while you were away.
 //
 // seen only ever grows within a session — an issue that leaves a filter is not
 // forgotten, which is also why one that leaves and comes back is not announced
 // twice. Both are bounded by how long the program runs.
 type watcher struct {
 	// watching is the set of saved-search IDs polled for the active provider,
-	// seeded from the config and toggled with `w`. Never written back.
+	// seeded from the config and toggled with `w`. Provider.Watch is the
+	// persisted copy of it.
 	watching map[string]bool
 	// seen[filterID] is the issue IDs already accounted for. A filter absent
 	// from the map has not been polled yet, which is what makes the first poll
@@ -133,15 +136,30 @@ func (m *Model) pollWatched() tea.Cmd {
 // toggleWatch starts or stops monitoring the selected filter for this session.
 // Nothing is written to the config: turning a poller on and off should not
 // rewrite a file.
+// toggleWatch starts or stops polling the selected filter and persists it.
+// Matching is by ID, so renaming a saved search in YouTrack keeps it watched
+// and two searches sharing a name stay independent — the same reason
+// favourites record IDs.
 func (m *Model) toggleWatch() tea.Cmd {
 	it, ok := m.filters.SelectedItem().(filterItem)
 	if !ok {
 		return nil
 	}
+	p := &m.cfg.Providers[m.provider]
 	if m.watch.watching[it.ID] {
 		m.watch.stop(it.ID)
+		if i := slices.Index(p.Watch, it.ID); i >= 0 {
+			p.Watch = slices.Delete(p.Watch, i, i+1)
+		}
 	} else {
 		m.watch.watching[it.ID] = true
+		if !slices.Contains(p.Watch, it.ID) {
+			p.Watch = append(p.Watch, it.ID)
+		}
+	}
+	if err := m.saveConfig(); err != nil {
+		// The poller still runs, it just will not be remembered.
+		m.dlg = infoDialog("Config not saved", err.Error())
 	}
 	return tea.Batch(m.setFilterItems(), m.refreshIssueMarks(), m.startWatch())
 }

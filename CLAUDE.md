@@ -118,11 +118,13 @@ These are not style preferences. Breaking any one of them breaks the product.
     persisted as the `${VAR}` reference — not the same thing as reading the
     variable at connect time. Do not make it the latter.
 
-11. **Watching is session state and is never written back.** `watch:` in the
-    config seeds it; `w` toggles it for the session. Turning a background
-    poller on and off must not rewrite a file, and `config.Save` — which other
-    features do call — has to carry `Provider.Watch` through untouched. See
-    `TestWatchToggleDoesNotTouchTheConfig`.
+11. **What is watched is persisted; what has been seen is not.** `watch:`
+    seeds `watcher.watching`, `w` toggles it and writes the config back, the
+    same way `f` does for `favorites` — both record IDs, so a rename in
+    YouTrack keeps the pin and the poller. `watcher.seen` and `watcher.fresh`
+    stay in memory: a restart re-seeds silently rather than announcing every
+    issue that arrived while the program was closed. See
+    `TestWatchTogglePersists`.
 
 12. **The first poll of a filter only seeds.** `watcher.record` returns nothing
     the first time it sees a filter ID. Without that, launching the program

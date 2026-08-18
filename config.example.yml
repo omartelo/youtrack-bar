@@ -28,8 +28,8 @@ providers:
       - 145-3
     # Saved-search IDs to poll in the background. An issue that appears in one
     # of these raises a desktop notification and is marked in the list until
-    # you open it. Read, never written: `w` in the app changes the watch list
-    # for that session only, and nothing about it survives a restart.
+    # you open it. Written by `w` in the app, like `favorites` is by `f`, so
+    # what you were watching is what the next run polls.
     watch:
       - 145-3
 
