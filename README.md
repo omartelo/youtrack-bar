@@ -11,8 +11,25 @@ Nothing is ever written back to YouTrack.
 
 ## Install
 
+Linux, macOS, or Git Bash on Windows:
+
 ```sh
-go install github.com/omartelo/youtrack-tui@latest
+curl -fsSL https://raw.githubusercontent.com/omartelo/youtrack-tui/main/install.sh | sh
+```
+
+The installer verifies the GitHub release checksum and writes to
+`$HOME/.local/bin`. Override that directory with `INSTALL_DIR`.
+
+Homebrew works on macOS and Linux:
+
+```sh
+brew install omartelo/tap/youtrack-tui
+```
+
+Arch Linux:
+
+```sh
+yay -S youtrack-tui-bin
 ```
 
 ## First run
