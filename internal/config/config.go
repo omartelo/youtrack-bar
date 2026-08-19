@@ -53,6 +53,12 @@ type Provider struct {
 	// is what you come back to.
 	Watch []string `yaml:"watch,omitempty"`
 
+	// Marked are issue IDs the user has ticked off with `x`, in the order they
+	// were ticked. Ours like Favorites and Watch, and deliberately without a
+	// meaning of its own: reviewed, read, answered, come back later — whatever
+	// the person pressing the key decided it means.
+	Marked []string `yaml:"marked,omitempty"`
+
 	// CAFile is a PEM bundle to trust on top of the system roots — the right
 	// answer for an instance behind a private or corporate CA.
 	CAFile string `yaml:"ca_file,omitempty"`
@@ -200,6 +206,7 @@ func (c *Config) Validate() error {
 		blank := func(f string) bool { return strings.TrimSpace(f) == "" }
 		p.Favorites = slices.DeleteFunc(p.Favorites, blank)
 		p.Watch = slices.DeleteFunc(p.Watch, blank)
+		p.Marked = slices.DeleteFunc(p.Marked, blank)
 
 		p.RawCAFile = strings.TrimSpace(p.CAFile)
 		p.CAFile = strings.TrimSpace(os.ExpandEnv(p.RawCAFile))

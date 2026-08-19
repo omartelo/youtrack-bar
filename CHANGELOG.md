@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `x` marks the issue under the cursor, and again unmarks it. Marked issues
+  carry a `✓` in the list gutter and the header says `✓ marked` on an open one.
+  The mark is recorded in the config next to `favorites`, so it survives a
+  restart, and it deliberately means nothing in particular: reviewed, read,
+  answered, come back later — whoever pressed the key knows.
+- The filters screen grows a `Marked` entry while anything is marked, running
+  `issue id: …` over exactly those issues. It is how marks are found again
+  across filters, and where they get cleared.
+
 ## [0.5.1] - 2026-08-19
 
 ### Fixed

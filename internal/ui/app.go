@@ -37,6 +37,10 @@ var builtinFilters = []youtrack.SavedQuery{
 	{ID: "builtin:all-unresolved", Name: "All unresolved", Query: "#Unresolved"},
 }
 
+// markedFilterID is the filter that lists what `x` has ticked. It only exists
+// while there is something to list, which is why it is not in builtinFilters.
+const markedFilterID = "builtin:marked"
+
 // Model is the root program state.
 type Model struct {
 	cfg      *config.Config
@@ -305,7 +309,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.migrateFavorites()
 		// The watch list resolves IDs against these, so the poller can only
 		// start once they have arrived.
-		return m, tea.Batch(m.setFilterItems(), m.startWatch())
+		return m, tea.Batch(m.refreshMarkedFilter(), m.startWatch())
 
 	case updateMsg:
 		m.newVersion = msg.tag
@@ -507,6 +511,9 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.toggleWatch()
 
+	case key.Matches(msg, m.keys.Mark):
+		return m, m.toggleMark()
+
 	case key.Matches(msg, m.keys.Browser):
 		if id := m.selectedIssueID(); id != "" {
 			return m, openInBrowser(m.client.IssueURL(id))
@@ -696,12 +703,75 @@ func appendNewIssues(have, page []youtrack.Issue) []youtrack.Issue {
 
 // setIssueItems rebuilds the issue list from every page fetched so far.
 func (m *Model) setIssueItems() tea.Cmd {
-	fields := m.cfg.Providers[m.provider].ListFields
+	p := m.cfg.Providers[m.provider]
+	marked := make(map[string]bool, len(p.Marked))
+	for _, id := range p.Marked {
+		marked[id] = true
+	}
 	items := make([]list.Item, 0, len(m.allIssues))
 	for _, iss := range m.allIssues {
-		items = append(items, issueItem{issue: iss, fields: fields, isNew: m.watch.isFresh(iss.ID)})
+		items = append(items, issueItem{
+			issue:  iss,
+			fields: p.ListFields,
+			isNew:  m.watch.isFresh(iss.ID),
+			marked: marked[iss.ID],
+		})
 	}
 	return m.issues.SetItems(items)
+}
+
+// isMarked reports whether an issue carries the user's tick.
+func (m *Model) isMarked(id string) bool {
+	return m.cfg != nil && slices.Contains(m.cfg.Providers[m.provider].Marked, id)
+}
+
+// toggleMark ticks the selected issue off, or takes the tick back. It records
+// IDs in the config next to `favorites` and `watch`, so a list worked through
+// over a day survives closing the program — which is the only reason to tick
+// anything off in the first place.
+//
+// The app assigns no meaning to it: reviewed, read, answered, deal with it
+// tomorrow. Whoever presses `x` knows what they meant.
+func (m *Model) toggleMark() tea.Cmd {
+	id := m.selectedIssueID()
+	if id == "" {
+		return nil
+	}
+	p := &m.cfg.Providers[m.provider]
+	if i := slices.Index(p.Marked, id); i >= 0 {
+		p.Marked = slices.Delete(p.Marked, i, i+1)
+	} else {
+		p.Marked = append(p.Marked, id)
+	}
+	if err := m.saveConfig(); err != nil {
+		m.dlg = infoDialog("Config not saved", err.Error())
+	}
+	// The list picks up the glyph; the Marked filter picks up the ID. On the
+	// detail screen the header is what says it, since neither is on show.
+	return tea.Batch(m.refreshIssueMarks(), m.refreshMarkedFilter())
+}
+
+// refreshMarkedFilter keeps the synthetic "Marked" filter in step with what is
+// ticked, and drops it once nothing is. Without a way back to them, marks
+// accumulate in a config nobody can review: the filters they were found under
+// change, and an ID alone says nothing about where it came from.
+//
+// ponytail: the whole list travels as one `issue id:` query, so a few hundred
+// marks make a URL long enough for a server to refuse. Upgrade: page the IDs,
+// or keep only the newest N.
+func (m *Model) refreshMarkedFilter() tea.Cmd {
+	m.savedQueries = slices.DeleteFunc(m.savedQueries, func(q youtrack.SavedQuery) bool {
+		return q.ID == markedFilterID
+	})
+	if ids := m.cfg.Providers[m.provider].Marked; len(ids) > 0 {
+		at := min(len(builtinFilters), len(m.savedQueries))
+		m.savedQueries = slices.Insert(m.savedQueries, at, youtrack.SavedQuery{
+			ID:    markedFilterID,
+			Name:  "Marked",
+			Query: "issue id: " + strings.Join(ids, ", "),
+		})
+	}
+	return m.setFilterItems()
 }
 
 // refreshIssueMarks redraws the list so a newly arrived issue picks up its
@@ -909,6 +979,12 @@ func (m *Model) header() string {
 		// Exactly what was appended to the query, not a prettier name for it:
 		// the same string works when typed into the `s` prompt.
 		left += " " + styDim.Render("sort by: "+clause)
+	}
+
+	if m.screen == screenDetail && m.current != nil && m.isMarked(m.current.ID) {
+		// The list glyph is two screens away; without this `x` on an open
+		// issue looks like a key that does nothing.
+		left += " " + styMark.Render("✓ marked")
 	}
 
 	if m.screen == screenDetail && m.commentsNewestFirst() {

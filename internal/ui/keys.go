@@ -12,6 +12,7 @@ type keyMap struct {
 	Sort     key.Binding
 	Favorite key.Binding
 	Watch    key.Binding
+	Mark     key.Binding
 	Browser  key.Binding
 	Copy     key.Binding
 	More     key.Binding
@@ -46,7 +47,10 @@ func defaultKeys() keyMap {
 		Sort:     key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sort order")),
 		Favorite: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "pin/unpin")),
 		Watch:    key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "watch/unwatch")),
-		Browser:  key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in YouTrack")),
+		// What the mark means is the user's business — reviewed, read, come
+		// back later — so the help says what it does, not what it is for.
+		Mark:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark/unmark")),
+		Browser: key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in YouTrack")),
 		// OSC 52 rather than a clipboard tool: it goes through the terminal,
 		// which is the one thing that still works over SSH.
 		Copy:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy URL")),
@@ -73,9 +77,9 @@ func (s screenKeys) ShortHelp() []key.Binding {
 	case screenSetup:
 		return []key.Binding{s.k.Field, s.k.Save, s.k.Reveal, s.k.Abort}
 	case screenDetail:
-		return []key.Binding{s.k.Scroll, s.k.Comments, s.k.Browser, s.k.Copy, s.k.Sort, s.k.Back, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Scroll, s.k.Comments, s.k.Browser, s.k.Copy, s.k.Mark, s.k.Sort, s.k.Back, s.k.Help, s.k.Quit}
 	case screenIssues:
-		return []key.Binding{s.k.Open, s.k.Browser, s.k.Copy, s.k.More, s.k.Search, s.k.Sort, s.k.Filter, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Open, s.k.Browser, s.k.Copy, s.k.Mark, s.k.More, s.k.Search, s.k.Sort, s.k.Filter, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
 	default:
 		return []key.Binding{s.k.Open, s.k.Favorite, s.k.Watch, s.k.Search, s.k.Sort, s.k.Filter, s.k.Reload, s.k.Help, s.k.Quit}
 	}
@@ -88,13 +92,13 @@ func (s screenKeys) FullHelp() [][]key.Binding {
 	if s.s == screenDetail {
 		return [][]key.Binding{
 			{s.k.Scroll, s.k.Top, s.k.Bottom, s.k.Comments},
-			{s.k.Browser, s.k.Copy, s.k.Sort, s.k.Back, s.k.Reload},
+			{s.k.Browser, s.k.Copy, s.k.Mark, s.k.Sort, s.k.Back, s.k.Reload},
 			{s.k.Help, s.k.Quit},
 		}
 	}
 	return [][]key.Binding{
 		{s.k.Open, s.k.Browser, s.k.Copy, s.k.Back, s.k.Scroll},
-		{s.k.Search, s.k.Sort, s.k.Filter, s.k.Favorite, s.k.Watch, s.k.More, s.k.Reload, s.k.Provider},
+		{s.k.Search, s.k.Sort, s.k.Filter, s.k.Favorite, s.k.Watch, s.k.Mark, s.k.More, s.k.Reload, s.k.Provider},
 		{s.k.Help, s.k.Quit},
 	}
 }

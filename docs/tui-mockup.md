@@ -174,15 +174,15 @@ per poll, and is marked `●` in the list until it is opened:
 ```
    Issues                                                                  3 issues
 
-▌ ● PAY-1421  Checkout retries duplicate the charge
-    In Progress · Critical · Ana Souza · updated 2m
+▌   ● PAY-1421  Checkout retries duplicate the charge
+      In Progress · Critical · Ana Souza · updated 2m
 
-    PAY-1388  Cache invalidation misses on blue/green deploy
-    Open · Major · Bruno Lima · updated 1d
+      PAY-1388  Cache invalidation misses on blue/green deploy
+      Open · Major · Bruno Lima · updated 1d
 ```
 
-The marker sits in the same two-column gutter the star uses on the filters
-screen, so an arrival never shifts the rows around it.
+The marker sits in the same gutter the star uses on the filters screen — one
+column per marker, always — so an arrival never shifts the rows around it.
 
 ## 1b — Raw query
 
@@ -216,21 +216,48 @@ instance, nothing is hardcoded.
 
   ISSUES                                                                 23 issues
 
-▌ PAY-1421  Checkout retries duplicate the charge
-  In Progress · Critical · Ana Souza · updated 2h
+▌ ✓   PAY-1421  Checkout retries duplicate the charge
+      In Progress · Critical · Ana Souza · updated 2h
 
-  PAY-1388  Cache invalidation misses on blue/green deploy
-  Open · Major · Bruno Lima · updated 1d
+  ✓   PAY-1388  Cache invalidation misses on blue/green deploy
+      Open · Major · Bruno Lima · updated 1d
 
-  PAY-1355  Flaky test: TestSettlementWindow
-  Open · Minor · — · updated 3d
+      PAY-1355  Flaky test: TestSettlementWindow
+      Open · Minor · — · updated 3d
 
-  INF-208   Rotate the staging signing key
-  Waiting for review · Major · Ana Souza · updated 5d
+      INF-208   Rotate the staging signing key
+      Waiting for review · Major · Ana Souza · updated 5d
 
 
-  enter open · o open in YouTrack · m load more · s query YouTrack · S sort order · / search list · esc back
+  enter open · o open in YouTrack · x mark/unmark · m load more · s query YouTrack · S sort order · / search list · esc back
 ```
+
+`x` ticks the issue under the cursor, and again takes the tick back. The ✓ is
+whatever you decide it is — reviewed, read, answered, deal with it tomorrow —
+and it is written to the config, so it is still there tomorrow. It works on an
+open issue too, where the header says `✓ marked` instead, the list being two
+screens away.
+
+Everything ticked shows up as one more filter, so the marks can be found — and
+cleared — without remembering which filter they were read under:
+
+```
+  FILTERS
+
+  ★ Sprint 42 — backend
+    project: PAY Sprint: {Sprint 42} #Unresolved
+
+      My open issues
+      for: me #Unresolved
+
+      All unresolved
+      #Unresolved
+
+      Marked
+      issue id: PAY-1421, PAY-1388
+```
+
+It appears with the first tick and goes away with the last.
 
 `S` cycles the ordering clause — nothing, `updated desc`, `updated asc`,
 `created desc`, `created asc` — and reruns the query from the first page, since

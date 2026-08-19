@@ -26,6 +26,10 @@ var (
 	styFav      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	styNew      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("46"))
 
+	// A ticked issue is done with, so its glyph recedes rather than competes
+	// with the ● of one that just arrived.
+	styMark = lipgloss.NewStyle().Foreground(lipgloss.Color("108"))
+
 	// Watching is ambient state, not an alert: a glyph in the gutter, no filled
 	// chip. The header already carries two of those for identity.
 	styWatch     = lipgloss.NewStyle().Foreground(lipgloss.Color("44"))
@@ -97,16 +101,22 @@ type issueItem struct {
 	// isNew marks an issue a watched filter picked up since this session
 	// started, until it is opened.
 	isNew bool
+	// marked is the user's own tick, persisted in the config. It carries no
+	// meaning of its own — see Provider.Marked.
+	marked bool
 }
 
-// Title reserves the same two-column gutter as the filters list, so a new
-// arrival never shifts the rows around it.
+// Title reserves one gutter column per marker, the way the filters list does,
+// so ticking an issue or a new one arriving never shifts the rows sideways.
 func (i issueItem) Title() string {
-	mark := "  "
-	if i.isNew {
-		mark = styNew.Render("●") + " "
+	tick, fresh := " ", " "
+	if i.marked {
+		tick = styMark.Render("✓")
 	}
-	return mark + i.issue.ID + "  " + i.issue.Summary
+	if i.isNew {
+		fresh = styNew.Render("●")
+	}
+	return tick + " " + fresh + " " + i.issue.ID + "  " + i.issue.Summary
 }
 func (i issueItem) FilterValue() string { return i.issue.ID + " " + i.issue.Summary }
 
@@ -129,7 +139,7 @@ func (i issueItem) Description() string {
 		}
 	}
 	parts = append(parts, "updated "+relTime(i.issue.Updated))
-	return "  " + strings.Join(parts, " · ")
+	return "    " + strings.Join(parts, " · ")
 }
 
 var _ list.DefaultItem = issueItem{}
