@@ -9,6 +9,7 @@ type keyMap struct {
 	Provider key.Binding
 	Filter   key.Binding
 	Search   key.Binding
+	Sort     key.Binding
 	Favorite key.Binding
 	Watch    key.Binding
 	Browser  key.Binding
@@ -36,6 +37,7 @@ func defaultKeys() keyMap {
 		Provider: key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "next provider")),
 		Filter:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search list")),
 		Search:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "query YouTrack")),
+		Sort:     key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "sort order")),
 		Favorite: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "pin/unpin")),
 		Watch:    key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "watch/unwatch")),
 		Browser:  key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in YouTrack")),
@@ -61,9 +63,9 @@ func (s screenKeys) ShortHelp() []key.Binding {
 	case screenDetail:
 		return []key.Binding{s.k.Scroll, s.k.Browser, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
 	case screenIssues:
-		return []key.Binding{s.k.Open, s.k.Browser, s.k.More, s.k.Search, s.k.Filter, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Open, s.k.Browser, s.k.More, s.k.Search, s.k.Sort, s.k.Filter, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
 	default:
-		return []key.Binding{s.k.Open, s.k.Favorite, s.k.Watch, s.k.Search, s.k.Filter, s.k.Reload, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Open, s.k.Favorite, s.k.Watch, s.k.Search, s.k.Sort, s.k.Filter, s.k.Reload, s.k.Help, s.k.Quit}
 	}
 }
 
@@ -73,7 +75,7 @@ func (s screenKeys) FullHelp() [][]key.Binding {
 	}
 	return [][]key.Binding{
 		{s.k.Open, s.k.Browser, s.k.Back, s.k.Scroll},
-		{s.k.Search, s.k.Filter, s.k.Favorite, s.k.Watch, s.k.More, s.k.Reload, s.k.Provider},
+		{s.k.Search, s.k.Sort, s.k.Filter, s.k.Favorite, s.k.Watch, s.k.More, s.k.Reload, s.k.Provider},
 		{s.k.Help, s.k.Quit},
 	}
 }

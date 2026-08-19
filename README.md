@@ -166,6 +166,7 @@ task cover                    # coverage summary
 | `o`      | open the issue in YouTrack (browser)      |
 | `m`      | load the next page of issues              |
 | `s`      | type a raw YouTrack query                 |
+| `S`      | cycle the sort order of the issue list    |
 | `f`      | pin/unpin the selected filter (favourite) |
 | `w`      | watch/unwatch the selected filter         |
 | `/`      | fuzzy-search the current list             |
@@ -180,10 +181,17 @@ shortcut (`ctrl+shift+v`, middle-click, `cmd+v`); `ctrl+v` reads the system
 clipboard directly.
 
 `s` and `/` are different things: `s` asks YouTrack a new question, `/` narrows
-what is already on screen. `o` works from the issue list and from an open issue. Attachments and links
+what is already on screen. `S` cycles `sort by:` — filter's own order (YouTrack
+defaults to `updated`), then `updated desc/asc` and `created desc/asc` — and
+appends it to the query, the same clause YouTrack's own sort helper writes.
+Ordering happens on the instance, so the list is fetched again from the first
+page. To sort by a custom field, type the clause yourself: `s`, then
+`project: PAY #Unresolved sort by: Priority desc`.
+
+`o` works from the issue list and from an open issue. Attachments and links
 still go through Ctrl+Click: mouse tracking is deliberately disabled so the
-terminal keeps handling OSC 8 hyperlinks. See `CLAUDE.md` for the full invariants and the list
-of known ceilings.
+terminal keeps handling OSC 8 hyperlinks. See `CLAUDE.md` for the full
+invariants and the list of known ceilings.
 
 ## Screens
 

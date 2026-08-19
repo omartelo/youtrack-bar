@@ -136,7 +136,7 @@ never shifts the list sideways.
     reported by: me #Unresolved
 
 
-  enter open · f pin/unpin · w watch/unwatch · s query YouTrack · / search list · ? help · q quit
+  enter open · f pin/unpin · w watch/unwatch · s query YouTrack · S sort order · / search list · ? help · q quit
 ```
 
 ## 1c — Watching
@@ -229,7 +229,16 @@ instance, nothing is hardcoded.
   Waiting for review · Major · Ana Souza · updated 5d
 
 
-  enter open · o open in YouTrack · m load more · s query YouTrack · / search list · esc back
+  enter open · o open in YouTrack · m load more · s query YouTrack · S sort order · / search list · esc back
+```
+
+`S` cycles the ordering clause — nothing, `updated desc`, `updated asc`,
+`created desc`, `created asc` — and reruns the query from the first page, since
+sorting is the instance's job and the pages on screen are one window onto the
+result set. While a clause is on, the header carries it verbatim:
+
+```
+ youtrack-tui  acme  sort by: created desc                      for: me #Unresolved
 ```
 
 `m` appends the next `page_size` issues. It only shows up while a full page came
