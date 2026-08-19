@@ -59,3 +59,17 @@ jobs:
           HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
           # SSH key registered on the AUR account that owns youtrack-tui-bin.
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+      # Composing the notes is not publishing them: GoReleaser reads
+      # --release-notes inside the changelog pipe, so a config that skips that
+      # pipe publishes an empty release and says nothing. Two versions went out
+      # that way before anyone looked. Fail here instead.
+      - name: Verify the release carries its notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body | tr -d '[:space:]')
+          if [ -z "$body" ]; then
+            echo "${GITHUB_REF_NAME} was published with empty release notes" >&2
+            exit 1
+          fi

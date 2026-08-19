@@ -35,9 +35,13 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  # The notes come from CHANGELOG.md via --release-notes; a generated commit
-  # log would only be built and thrown away.
-  disable: true
+  # The notes come from CHANGELOG.md via --release-notes, and GoReleaser stops
+  # here as soon as it has them — no commit log is built.
+  #
+  # `disable: true` is what it must NOT say: reading --release-notes is this
+  # pipe's own job, so disabling it drops the notes on the floor and publishes
+  # a release with an empty body. v0.4.0 and v0.5.0 went out that way.
+  use: git
 
 # Cask, not formula: `brews` is hard-deprecated as of GoReleaser v2.16 and
 # `goreleaser check` fails on it. Casks are macOS-only — Homebrew on Linux does
