@@ -84,6 +84,12 @@ type Config struct {
 	// WatchEvery is WatchInterval parsed.
 	WatchEvery time.Duration `yaml:"-"`
 
+	// CommentsNewestFirst opens an issue with its newest comment on top. The
+	// API returns them oldest first, which is a lot of scrolling on a busy
+	// issue. `S` on an open issue flips it and writes the file, the same way
+	// `f` and `w` persist what they toggle.
+	CommentsNewestFirst bool `yaml:"comments_newest_first,omitempty"`
+
 	// CheckUpdates turns the startup release check off. A pointer so that
 	// absent means on and `check_updates: false` survives a Save — the zero
 	// value of a bool cannot tell those two apart.

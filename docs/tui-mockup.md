@@ -303,7 +303,7 @@ in API order.
     Carla Dias  2h
     Confirmed on staging after the fix — single authorization.
 
-  ↑/↓ scroll · o open in YouTrack · esc back · r reload · ? help · q quit
+  ↑/↓ scroll · c comments · o open in YouTrack · y copy URL · S sort order ·...
 ```
 
 ## Notes on the layout

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -75,6 +76,21 @@ type Model struct {
 	allIssues  []youtrack.Issue
 	moreIssues bool
 
+	// cache holds each query's issues for issueCacheTTL, so that stepping out
+	// of an issue and into the next one does not fetch the list again. Keyed
+	// by the query as sent, ordering clause included; emptied by `r` and by a
+	// provider switch, since the same query means something else elsewhere.
+	cache map[string]cachedIssues
+
+	// flash is a one-line confirmation in the header — what `y` copied, say.
+	// flashGen retires the timer of a flash that was replaced by a newer one.
+	flash    string
+	flashGen int
+
+	// commentsLine is where the comments start in the rendered issue, so `c`
+	// can jump there. Recomputed by renderDetail, since the order flips.
+	commentsLine int
+
 	// sortBy indexes sortOrders: the `sort by:` clause pushed onto every issue
 	// query. Session-only, like the query itself.
 	sortBy int
@@ -96,6 +112,25 @@ type Model struct {
 	loading bool
 	w, h    int
 }
+
+// cachedIssues is one query's result set and when it was fetched. The page
+// count is not kept: a short page is what says "that was the last one", and
+// the handler works that out again from the length.
+type cachedIssues struct {
+	issues []youtrack.Issue
+	at     time.Time
+}
+
+// issueCacheTTL is deliberately short. The point is the back-and-forth between
+// a list and the issues on it, not saving a request an hour from now — the
+// list on screen must not be yesterday's board.
+const issueCacheTTL = 30 * time.Second
+
+// flashFor is how long a header confirmation stays up.
+const flashFor = 2 * time.Second
+
+// flashExpiredMsg clears a header confirmation, unless a newer one replaced it.
+type flashExpiredMsg struct{ gen int }
 
 // New builds the program. A nil cfg means there is no config file yet and the
 // program opens on the setup screen instead of failing. provider selects a
@@ -150,10 +185,50 @@ func (m *Model) setProvider(i int) error {
 		return fmt.Errorf("provider %q: %w", p.Name, err)
 	}
 	m.provider, m.client = i, c
+	// A cached query belongs to the instance it was asked of: the same text
+	// means different issues on the next one.
+	clear(m.cache)
 	// Watched filters, what has been seen and what is still marked new are all
 	// per-instance, so switching starts over rather than carrying state across.
 	m.watch = newWatcher(p.Watch)
 	return nil
+}
+
+// flashCmd puts a confirmation in the header and takes it away again. Only
+// for things that otherwise leave no trace: a clipboard write nobody sees is
+// indistinguishable from a key that does nothing. Errors are still dialogs.
+func (m *Model) flashCmd(text string) tea.Cmd {
+	m.flashGen++
+	m.flash = text
+	gen := m.flashGen
+	return tea.Tick(flashFor, func(time.Time) tea.Msg { return flashExpiredMsg{gen} })
+}
+
+// cacheKey is the query as it goes over the wire, ordering clause included:
+// the same filter sorted two ways is two result sets.
+func (m *Model) cacheKey(query string) string {
+	return applySort(query, sortOrders[m.sortBy])
+}
+
+// cacheIssues remembers everything currently on the issue list, pages and all,
+// so that going back to it is free for issueCacheTTL.
+func (m *Model) cacheIssues() {
+	if m.query == "" || len(m.allIssues) == 0 {
+		return
+	}
+	if m.cache == nil {
+		m.cache = make(map[string]cachedIssues)
+	}
+	// Cloned: appendNewIssues grows allIssues in place, which would otherwise
+	// reach into the entry that was just stored.
+	m.cache[m.cacheKey(m.query)] = cachedIssues{issues: slices.Clone(m.allIssues), at: time.Now()}
+}
+
+// commentsNewestFirst is the reading order of an issue's comments. It lives
+// in the config so that `S` on the detail screen is remembered, and is read
+// through here because there is no config at all on the setup screen.
+func (m *Model) commentsNewestFirst() bool {
+	return m.cfg != nil && m.cfg.CommentsNewestFirst
 }
 
 func (m *Model) insecure() bool {
@@ -248,9 +323,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.allIssues, at = msg.issues, 0
 		}
+		m.cacheIssues()
 		cmd := m.setIssueItems()
 		m.issues.Select(at)
 		return m, cmd
+
+	case flashExpiredMsg:
+		if msg.gen == m.flashGen {
+			m.flash = ""
+		}
+		return m, nil
 
 	case detailMsg:
 		if msg.gen != m.gen {
@@ -258,6 +340,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loading = false
 		m.screen = screenDetail
+		if m.commentsNewestFirst() {
+			slices.Reverse(msg.comments)
+		}
 		m.current, m.comments = msg.issue, msg.comments
 		m.renderDetail()
 		m.detail.GotoTop()
@@ -360,6 +445,8 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadFilters()
 
 	case key.Matches(msg, m.keys.Reload):
+		// `r` means "ask again", so it has to outrank the cache.
+		clear(m.cache)
 		return m, m.reload()
 
 	case key.Matches(msg, m.keys.More):
@@ -377,6 +464,20 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case key.Matches(msg, m.keys.Sort):
+		if m.screen == screenDetail {
+			// Comments are ordered here, not by the instance: they all came
+			// down with the issue, so reversing the slice is the whole job.
+			// The config holds the choice, so the flip outlives the session
+			// the same way `f` and `w` do.
+			m.cfg.CommentsNewestFirst = !m.cfg.CommentsNewestFirst
+			slices.Reverse(m.comments)
+			if err := m.saveConfig(); err != nil {
+				m.dlg = infoDialog("Config not saved", err.Error())
+			}
+			m.renderDetail()
+			m.detail.GotoTop()
+			return m, nil
+		}
 		if m.screen != screenFilters && m.screen != screenIssues {
 			return m, nil
 		}
@@ -404,6 +505,29 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if id := m.selectedIssueID(); id != "" {
 			return m, openInBrowser(m.client.IssueURL(id))
 		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Copy):
+		id := m.selectedIssueID()
+		if id == "" {
+			return m, nil
+		}
+		// OSC 52 hands the URL to the terminal rather than to a clipboard
+		// tool, which is what makes it work over SSH — where `o` has no
+		// browser to open and answers with a dialog holding the URL instead.
+		return m, tea.Batch(tea.SetClipboard(m.client.IssueURL(id)),
+			m.flashCmd(id+" URL copied"))
+
+	case m.screen == screenDetail && key.Matches(msg, m.keys.Comments):
+		m.detail.SetYOffset(m.commentsLine)
+		return m, nil
+
+	case m.screen == screenDetail && key.Matches(msg, m.keys.Top):
+		m.detail.GotoTop()
+		return m, nil
+
+	case m.screen == screenDetail && key.Matches(msg, m.keys.Bottom):
+		m.detail.GotoBottom()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -700,7 +824,24 @@ func (m *Model) renderDetail() {
 	if m.current == nil || m.w == 0 {
 		return
 	}
-	m.detail.SetContent(renderIssue(m.client, m.current, m.comments, m.w))
+	body := renderIssue(m.client, m.current, m.comments, m.w)
+	m.detail.SetContent(body)
+	m.commentsLine = commentsLineOf(body)
+}
+
+// commentsLineOf finds the comments heading in a rendered issue, which is
+// where `c` scrolls to. Zero — the top — when there is none to find.
+//
+// ponytail: counts lines of the rendered document, so it assumes the viewport
+// shows them one for one. Everything here is already wrapped to the pane
+// width, so it does; a soft-wrapping viewport would need its own line count.
+func commentsLineOf(body string) int {
+	for i, line := range strings.Split(body, "\n") {
+		if strings.Contains(line, "Comments (") {
+			return i
+		}
+	}
+	return 0
 }
 
 // View implements tea.Model.
@@ -760,6 +901,16 @@ func (m *Model) header() string {
 		// Exactly what was appended to the query, not a prettier name for it:
 		// the same string works when typed into the `s` prompt.
 		left += " " + styDim.Render("sort by: "+clause)
+	}
+
+	if m.screen == screenDetail && m.commentsNewestFirst() {
+		// Written to the config, so it stays on until it is turned off —
+		// worth a word on screen, like the sort clause above.
+		left += " " + styDim.Render("comments: newest first")
+	}
+
+	if m.flash != "" {
+		left += " " + styWatch.Render(m.flash)
 	}
 
 	if m.newVersion != "" {

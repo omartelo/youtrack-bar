@@ -5,6 +5,7 @@ package ui
 
 import (
 	"context"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -54,6 +55,15 @@ func (m *Model) loadFilters() tea.Cmd {
 
 func (m *Model) loadIssues(query string) tea.Cmd {
 	m.query = query
+	// A hit still goes back through issuesMsg rather than assigning here: it
+	// is the same answer, only faster, and the handler is what knows how to
+	// take one. `r` empties the cache, so this never stands between the user
+	// and a refresh they asked for.
+	if hit, ok := m.cache[m.cacheKey(query)]; ok && time.Since(hit.at) < issueCacheTTL {
+		_, gen := m.begin()
+		issues := hit.issues
+		return func() tea.Msg { return issuesMsg{gen, issues, false} }
+	}
 	return m.fetchIssues(query, 0, false)
 }
 

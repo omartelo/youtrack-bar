@@ -11,6 +11,11 @@ watch_interval: 2m
 # or none to stay quiet.
 notifier: zenity
 
+# Open an issue with its newest comment on top instead of the oldest, which is
+# the order YouTrack returns them in. `S` on an open issue flips it and writes
+# this line back, so setting it here is only for the first run.
+comments_newest_first: false
+
 # The TUI asks GitHub for a newer release once at startup and reports it in the
 # header; `youtrack-tui update` is what installs one. Set to false to stay off
 # the network entirely.

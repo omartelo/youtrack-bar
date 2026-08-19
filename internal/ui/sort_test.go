@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/omartelo/youtrack-tui/internal/config"
+	"github.com/omartelo/youtrack-tui/internal/youtrack"
 )
 
 func TestApplySortReplacesTheClause(t *testing.T) {
@@ -78,5 +79,63 @@ func TestSortKeyRefetchesOrdered(t *testing.T) {
 	}
 	if last != "#Unresolved" {
 		t.Errorf("full cycle sent %q, want the query untouched", last)
+	}
+}
+
+// `S` on an open issue reorders its comments and writes the choice back, so
+// the next launch opens the same way round. The list is ordered in memory —
+// every comment came down with the issue, so nothing is refetched.
+func TestCommentOrderSeedsFromConfigAndToggles(t *testing.T) {
+	cfg := &config.Config{
+		CommentsNewestFirst: true,
+		Providers:           []config.Provider{{Name: "acme", URL: "https://acme.example", Token: "perm:tok"}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "config.yml")
+	m, err := New(cfg, "", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.w, m.h = 80, 24
+	m.layout()
+
+	press(m, detailMsg{
+		gen:      m.gen,
+		issue:    &youtrack.Issue{ID: "PAY-1"},
+		comments: []youtrack.Comment{{Text: "oldest"}, {Text: "newest"}},
+	})
+	if got := m.comments[0].Text; got != "newest" {
+		t.Errorf("comments_newest_first: first comment = %q, want %q", got, "newest")
+	}
+
+	press(m, tea.KeyPressMsg{Code: 'S', Text: "S"})
+	if got := m.comments[0].Text; got != "oldest" {
+		t.Errorf("after `S`: first comment = %q, want %q", got, "oldest")
+	}
+	view := plain(m.detail.View())
+	if i, j := strings.Index(view, "oldest"), strings.Index(view, "newest"); i < 0 || j < 0 || i > j {
+		t.Errorf("the detail pane was not re-rendered in the new order:\n%s", view)
+	}
+
+	// The choice outlives the issue it was made on: the next one opens the
+	// same way round.
+	press(m, detailMsg{
+		gen:      m.gen,
+		issue:    &youtrack.Issue{ID: "PAY-2"},
+		comments: []youtrack.Comment{{Text: "oldest"}, {Text: "newest"}},
+	})
+	if got := m.comments[0].Text; got != "oldest" {
+		t.Errorf("next issue: first comment = %q, want the toggled order", got)
+	}
+
+	// And outlives the program: `S` writes the config, like `f` and `w` do.
+	saved, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("`S` did not write the config: %v", err)
+	}
+	if saved.CommentsNewestFirst {
+		t.Error("comments_newest_first was not written back as false")
 	}
 }
