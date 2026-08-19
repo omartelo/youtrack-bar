@@ -149,7 +149,9 @@ These are not style preferences. Breaking any one of them breaks the product.
 
 15. **Errors go to the dialog, never to the header.** A wrapped TLS error is
     three lines long; the header is one. `errMsg` builds a `*dialog`, which
-    owns the keyboard until dismissed.
+    owns the keyboard until dismissed. `Model.flash` is not a counterexample:
+    it confirms something that succeeded, fits in a word, and clears itself —
+    `flashGen` retires the timer of a flash a newer one replaced.
 
 16. **`overlay` must go through `lipgloss.NewCompositor`.** `Canvas.Compose`
     on a parent layer calls `Layer.Draw`, which paints that layer's own content
@@ -227,6 +229,13 @@ of them needs "fixing" before somebody actually complains.
   persisted, like the query it decorates. *Upgrade:* a `sort_options:` list on
   the provider, the same knob `list_fields` already is.
 
+- **Comment order is global, not per-issue.** `S` on the detail screen writes
+  `comments_newest_first` and every issue opened afterwards follows. The
+  config is the state — there is no `Model` copy to keep in step — and the
+  open issue is reordered by reversing `Model.comments` in place, because the
+  comments all arrived with it and there is nothing to refetch. *Upgrade:* per
+  provider, if two instances ever deserve different answers.
+
 - **A raw query is not saved anywhere.** `s` runs it for the session; it is
   gone on restart and cannot be pinned, because `favorites` records IDs and an
   ad-hoc query has none. *Upgrade:* a `queries:` list on the provider, which
@@ -253,9 +262,13 @@ of them needs "fixing" before somebody actually complains.
   issues in the same poll produce two popups. *Upgrade:* zenity cannot do
   actionable notifications; that needs `notify-send --action` and a listener.
 
-- **No cache.** Every navigation re-fetches. Fine on a good link, painful over
-  VPN. *Upgrade:* measure first; if it hurts, a `map[string]issueCache` with a
-  short TTL on `Model` — not a caching layer.
+- **The issue cache is 30 seconds, whole-list and in memory.** `Model.cache`
+  keys on the query as sent — ordering clause included — and holds every page
+  loaded so far. It is emptied by `r` and by a provider switch, never written
+  to disk, and an issue's own detail is not cached at all. The window is short
+  on purpose: the point is walking a list and back, not a board that is an
+  hour old. *Upgrade:* an ETag or `updated` probe, if 30 seconds ever feels
+  both too long and too short.
 
 - **A date stored in `SimpleIssueCustomField` renders as a number.** The API
   only distinguishes date from integer via
@@ -271,8 +284,10 @@ of them needs "fixing" before somebody actually complains.
   viewport to select one.
 
 - **`o` needs a desktop.** Over SSH or on a headless box `xdg-open` fails; the
-  dialog then shows the URL to copy out. *Upgrade:* an OSC 52 clipboard write,
-  which works through an SSH session where a browser does not.
+  dialog then shows the URL to copy out. `y` is the way around it: OSC 52 goes
+  through the terminal rather than the machine the program runs on. It cannot
+  be confirmed — nothing answers an OSC 52 write — so the header flash says
+  what was sent, not that it arrived.
 
 - **Descriptions and comments render through glamour at a fixed width.** Wide
   markdown tables overflow. *Upgrade:* none that is cheap; live with it.

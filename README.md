@@ -164,9 +164,12 @@ task cover                    # coverage summary
 | `esc`    | back one screen                           |
 | `↑` `↓`  | move / scroll                             |
 | `o`      | open the issue in YouTrack (browser)      |
+| `y`      | copy the issue URL to the clipboard       |
+| `c`      | open issue: jump to the comments          |
+| `g` `G`  | open issue: top / bottom                  |
 | `m`      | load the next page of issues              |
 | `s`      | type a raw YouTrack query                 |
-| `S`      | cycle the sort order of the issue list    |
+| `S`      | issue list: cycle the sort order · open issue: flip the comment order |
 | `f`      | pin/unpin the selected filter (favourite) |
 | `w`      | watch/unwatch the selected filter         |
 | `/`      | fuzzy-search the current list             |
@@ -187,6 +190,24 @@ appends it to the query, the same clause YouTrack's own sort helper writes.
 Ordering happens on the instance, so the list is fetched again from the first
 page. To sort by a custom field, type the clause yourself: `s`, then
 `project: PAY #Unresolved sort by: Priority desc`.
+
+On an open issue `S` flips its comments between oldest-first — how YouTrack
+returns them — and newest-first, which is where the news is on a long issue.
+The flip is written to the config, so the next launch opens the same way round
+and the header says which one is on. To set it by hand:
+
+```yaml
+comments_newest_first: true
+```
+
+`y` copies the issue URL through the terminal (OSC 52), which is what makes it
+work over SSH, where `o` has no browser to hand it to. Inside an open issue,
+`c` jumps to the comments, `g`/`G` go to the top and bottom, and `ctrl+u`/
+`ctrl+d` move half a screen — the viewport's own vim-style bindings, alongside
+`pgup`/`pgdn`.
+
+An issue list is kept for 30 seconds, so stepping out of an issue and into the
+next one does not fetch it again. `r` ignores that and asks the instance.
 
 `o` works from the issue list and from an open issue. Attachments and links
 still go through Ctrl+Click: mouse tracking is deliberately disabled so the
