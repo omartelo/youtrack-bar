@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-19
+
+### Added
+
+- `S` cycles the order of the issue list — the filter's own order, then
+  `updated` and `created` in both directions — by appending the `sort by:`
+  clause YouTrack's own sort helper writes. Sorting happens on the instance, so
+  the list is fetched again from the first page and the header carries the
+  clause while it is on. A custom field is named differently on every instance,
+  so `sort by: Priority desc` still goes through the `s` prompt.
+
 ## [0.3.0] - 2026-08-18
 
 ### Added
@@ -62,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AUR package.
 - GitHub CI with tests, race detection, golangci-lint, and release packaging.
 
-[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/omartelo/youtrack-tui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/omartelo/youtrack-tui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/omartelo/youtrack-tui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/omartelo/youtrack-tui/releases/tag/v0.1.0
