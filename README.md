@@ -115,6 +115,32 @@ issues that were already there, so a restart is quiet even though `w` is
 remembered: it writes the config, and `watch:` is what the next run picks up.
 Only the active provider is polled.
 
+## Marking issues
+
+`x` ticks the issue under the cursor off, and again takes the tick back. Ticked
+issues carry a `✓` in the list gutter, next to the `●` a watched filter puts
+there; on an open issue the header says `✓ marked`, since the list is not on
+screen.
+
+The tick means whatever you decide it means — reviewed, read, answered, deal
+with it tomorrow. The app never assigns it one, and nothing is sent to
+YouTrack: it is written to your config, next to `favorites`.
+
+```yaml
+providers:
+  - name: acme
+    marked:
+      - PAY-1421
+      - PAY-1388
+```
+
+Everything ticked also shows up as one more entry on the filters screen,
+`Marked`, which runs `issue id: PAY-1421, PAY-1388`. That is where marks get
+reviewed and cleared: filters change, an ID on its own says nothing about where
+it was read, and marks otherwise pile up in a file nobody opens. The entry
+appears with the first tick and goes away with the last — pressing `x` on that
+list is how you empty it.
+
 ## Updating
 
 The TUI checks GitHub for a newer release once, when it opens, and says so in
@@ -172,6 +198,7 @@ task cover                    # coverage summary
 | `S`      | issue list: cycle the sort order · open issue: flip the comment order |
 | `f`      | pin/unpin the selected filter (favourite) |
 | `w`      | watch/unwatch the selected filter         |
+| `x`      | mark/unmark the selected issue            |
 | `/`      | fuzzy-search the current list             |
 | `r`      | reload the current screen                 |
 | `p`      | switch to the next provider               |

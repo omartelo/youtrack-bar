@@ -42,6 +42,13 @@ providers:
     # what you were watching is what the next run polls.
     watch:
       - 145-3
+    # Issue IDs ticked off with `x` in the app. What the tick means is yours to
+    # decide — reviewed, read, come back later; the app assigns it no meaning
+    # and never tells YouTrack about it. While the list is not empty the
+    # filters screen offers a `Marked` entry listing exactly these, which is
+    # where they get reviewed and cleared.
+    marked:
+      - PAY-1421
 
   - name: internal
     url: https://youtrack.corp.local

@@ -191,6 +191,22 @@ These are not style preferences. Breaking any one of them breaks the product.
     does not know its own version (`dev`) is never told it is behind. See
     `TestUpdateCheckIsOnlyScheduledAtStartup`.
 
+22. **A mark means nothing in particular.** `x` appends an issue ID to
+    `Provider.Marked` and takes it away again; nothing else in the program
+    reads it. No filtering by it, no sorting by it, no "reviewed" written
+    anywhere on screen, and never a word sent to YouTrack — invariant 1 covers
+    the last part, and the rest is what makes the feature usable by somebody
+    whose workflow is not code review. The persisted-versus-volatile split of
+    invariant 11 applies: what is marked is in the config, and the glyph on
+    screen is derived from it, never the other way round.
+
+    The `Marked` filter is the other half. Marks that cannot be listed cannot
+    be cleared: the filter they were read under changes, and `PAY-1421` on its
+    own says nothing. It is synthesised from `Provider.Marked` on every toggle
+    — `refreshMarkedFilter` — so it never shows a query one tick out of date,
+    and it is absent when nothing is marked rather than empty. See
+    `TestMarkedFilterListsWhatIsTicked`.
+
 ## Known ceilings
 
 Deliberate simplifications. Each one has its upgrade path written down. None
@@ -235,6 +251,14 @@ of them needs "fixing" before somebody actually complains.
   open issue is reordered by reversing `Model.comments` in place, because the
   comments all arrived with it and there is nothing to refetch. *Upgrade:* per
   provider, if two instances ever deserve different answers.
+
+- **Marks never expire and never get cleared in bulk.** `Provider.Marked` only
+  grows until somebody presses `x` again on each entry, from the `Marked`
+  filter or from wherever the issue turns up. A year of review is a few hundred
+  lines of YAML, and that whole list travels as one `issue id: A, B, C…` query,
+  which a server will eventually refuse on length. *Upgrade:* age entries out
+  by date, or a confirmed "clear these" key on the `Marked` list — both need a
+  timestamp per mark, which the current `[]string` does not carry.
 
 - **A raw query is not saved anywhere.** `s` runs it for the session; it is
   gone on restart and cannot be pinned, because `favorites` records IDs and an
