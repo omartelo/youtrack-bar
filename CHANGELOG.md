@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-19
+
 ### Added
 
+- The header names the saved filter it is listing, beside the query that
+  filter stands for. Two searches over the same project used to read
+  identically; a raw query typed at the `s` prompt has no name and does not
+  inherit the previous one. The right-hand side is truncated rather than
+  allowed to wrap the header onto a second row.
 - `x` marks the issue under the cursor, and again unmarks it. Marked issues
   carry a `✓` in the list gutter and the header says `✓ marked` on an open one.
   The mark is recorded in the config next to `favorites`, so it survives a
@@ -116,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AUR package.
 - GitHub CI with tests, race detection, golangci-lint, and release packaging.
 
-[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/omartelo/youtrack-tui/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/omartelo/youtrack-tui/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/omartelo/youtrack-tui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/omartelo/youtrack-tui/compare/v0.3.0...v0.4.0
