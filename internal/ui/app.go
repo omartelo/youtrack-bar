@@ -14,6 +14,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/omartelo/youtrack-tui/internal/config"
 	"github.com/omartelo/youtrack-tui/internal/youtrack"
@@ -95,7 +96,12 @@ type Model struct {
 	// query. Session-only, like the query itself.
 	sortBy int
 
-	query    string
+	// query is what was sent; queryName is the saved search it came from, so
+	// the header can say "TO DEPLOY" as well as the clause behind it. Empty
+	// for a raw query typed at the `s` prompt — that one has no name.
+	query     string
+	queryName string
+
 	current  *youtrack.Issue
 	comments []youtrack.Comment
 
@@ -549,6 +555,7 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch m.screen {
 		case screenFilters:
 			if it, ok := m.filters.SelectedItem().(filterItem); ok {
+				m.queryName = it.Name
 				return m, m.loadIssues(it.Query)
 			}
 		case screenIssues:
@@ -580,6 +587,7 @@ func (m *Model) promptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if q == "" {
 			return m, nil
 		}
+		m.queryName = ""
 		return m, m.loadIssues(q)
 	}
 	return m, m.prompt.update(msg)
@@ -929,8 +937,17 @@ func (m *Model) header() string {
 		right = styDim.Render(m.current.ID)
 	case m.query != "":
 		right = styDim.Render(m.query)
+		if m.queryName != "" {
+			right = styValue.Render(m.queryName) + "  " + right
+		}
 	default:
 		right = styDim.Render("pick a filter")
+	}
+
+	// The name pushed an already long clause further right; without this the
+	// row overflows and lipgloss wraps it under the title.
+	if avail := m.w - lipgloss.Width(left) - 1; avail > 0 && lipgloss.Width(right) > avail {
+		right = ansi.Truncate(right, avail, "…")
 	}
 
 	gap := max(1, m.w-lipgloss.Width(left)-lipgloss.Width(right))
