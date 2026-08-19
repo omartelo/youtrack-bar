@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-19
+
+### Added
+
+- `S` on an open issue flips its comments between oldest-first — the order
+  YouTrack returns them in — and newest-first, and writes
+  `comments_newest_first` back to the config, so the choice survives a restart.
+  The header says which order is on.
+- `y` copies the issue URL to the clipboard through the terminal (OSC 52),
+  which works over SSH where `o` has no browser to hand it to. A one-line
+  header confirmation names what was copied.
+- `c` jumps to the comments of an open issue, and `g`/`G` to its ends. The
+  viewport's own `ctrl+u`/`ctrl+d` half-page bindings are now covered by a
+  test.
+
+### Changed
+
+- An issue list is kept for 30 seconds, so stepping out of an issue and into
+  the next one no longer fetches the list again. Two sort orders are cached
+  apart; `r` and a provider switch empty it.
+
 ## [0.4.0] - 2026-08-19
 
 ### Added
@@ -73,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AUR package.
 - GitHub CI with tests, race detection, golangci-lint, and release packaging.
 
-[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/omartelo/youtrack-tui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/omartelo/youtrack-tui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/omartelo/youtrack-tui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/omartelo/youtrack-tui/compare/v0.1.0...v0.2.0
