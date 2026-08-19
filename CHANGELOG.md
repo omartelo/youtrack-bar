@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-19
+
+### Fixed
+
+- Releases are published with their notes again. The workflow always composed
+  the CHANGELOG section and passed it as `--release-notes`, but GoReleaser
+  reads that file inside the changelog pipe, and `changelog.disable: true`
+  skipped the pipe — so v0.4.0 and v0.5.0 went out with an empty body. Both
+  have been filled in by hand, and the release run now reads the published
+  release back and fails if its notes are empty.
+
 ## [0.5.0] - 2026-08-19
 
 ### Added
@@ -94,7 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AUR package.
 - GitHub CI with tests, race detection, golangci-lint, and release packaging.
 
-[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/omartelo/youtrack-tui/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/omartelo/youtrack-tui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/omartelo/youtrack-tui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/omartelo/youtrack-tui/compare/v0.2.0...v0.3.0
