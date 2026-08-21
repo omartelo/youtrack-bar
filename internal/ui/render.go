@@ -42,19 +42,13 @@ var (
 	styQueryLabel = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("232")).Background(lipgloss.Color("62"))
 
-	// Every line inside the dialog carries the background itself. Nesting a
-	// styled string inside a background style does not work: the inner style
-	// emits an SGR reset that clears the background for the rest of the line.
-	dialogBG     = lipgloss.Color("236")
-	styDialogBox = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("203")).
-			BorderBackground(dialogBG).
-			Background(dialogBG).
-			Padding(1, 2)
-	styDialogTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203")).Background(dialogBG)
-	styDialogBody  = lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Background(dialogBG)
-	styDialogHint  = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Background(dialogBG)
+	// The dialog paints no background: every line is padded to the inner width
+	// instead, which covers the layer below without a background style that
+	// would need re-asserting on each row. Ported from omartelo/lazyovpn.
+	styDialogBorder = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	styDialogTitle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
+	styDialogBody   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	styDialogHint   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 	styInsecure = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("232")).Background(lipgloss.Color("203"))
 )
@@ -155,7 +149,9 @@ func renderIssue(c *youtrack.Client, iss *youtrack.Issue, comments []youtrack.Co
 
 	var b strings.Builder
 	b.WriteString(styHead.Render(link(iss.ID+"  "+iss.Summary, c.IssueURL(iss.ID))))
-	b.WriteString("\n")
+	// A blank line under the summary: it is the one line here that wraps, and
+	// with the dates against it the two read as one paragraph.
+	b.WriteString("\n\n")
 	b.WriteString(styDim.Render(fmt.Sprintf("reported by %s · created %s · updated %s",
 		fallback(iss.Reporter.String(), "—"), relTime(iss.Created), relTime(iss.Updated))))
 	b.WriteString("\n" + styRule.Render(strings.Repeat("─", inner)) + "\n")

@@ -27,7 +27,10 @@ const (
 	// Custom field values come in a dozen shapes; we ask for every key the
 	// generic renderer knows how to read and let the API drop what does not
 	// apply. $type is what keeps date/period rendering honest.
-	fieldsCustom = "customFields(name,$type,value($type,name,fullName,login,presentation,text,minutes))"
+	// The value half is named on its own because the editable-fields request
+	// asks for custom fields at their own endpoint, not nested in an issue.
+	fieldsValue  = "value($type,name,fullName,login,presentation,text,minutes)"
+	fieldsCustom = "customFields(name,$type," + fieldsValue + ")"
 
 	fieldsIssueList = "idReadable,summary,created,updated,resolved," + fieldsCustom
 

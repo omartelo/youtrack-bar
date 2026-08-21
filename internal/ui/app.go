@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -14,7 +13,6 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/omartelo/youtrack-tui/internal/config"
 	"github.com/omartelo/youtrack-tui/internal/youtrack"
@@ -27,19 +25,9 @@ const (
 	screenFilters
 	screenIssues
 	screenDetail
+	screenEditField
+	screenEditValue
 )
-
-// builtinFilters are always offered alongside the user's saved searches. Their
-// IDs are synthetic and prefixed so they can never collide with a YouTrack
-// entity ID, and they are what `favorites` records.
-var builtinFilters = []youtrack.SavedQuery{
-	{ID: "builtin:my-open-issues", Name: "My open issues", Query: "for: me #Unresolved"},
-	{ID: "builtin:all-unresolved", Name: "All unresolved", Query: "#Unresolved"},
-}
-
-// markedFilterID is the filter that lists what `x` has ticked. It only exists
-// while there is something to list, which is why it is not in builtinFilters.
-const markedFilterID = "builtin:marked"
 
 // Model is the root program state.
 type Model struct {
@@ -54,9 +42,14 @@ type Model struct {
 	filters list.Model
 	issues  list.Model
 	detail  viewport.Model
-	spin    spinner.Model
-	help    help.Model
-	keys    keyMap
+	// edit is the field-then-value picker `e` opens, one list.Model for both
+	// steps: the delegate changes, and the screen says which step it is.
+	edit       list.Model
+	editFields []youtrack.Editable
+	editField  int
+	spin       spinner.Model
+	help       help.Model
+	keys       keyMap
 
 	// dlg is the modal error popup. Non-nil means it owns the keyboard.
 	dlg *dialog
@@ -123,25 +116,6 @@ type Model struct {
 	w, h    int
 }
 
-// cachedIssues is one query's result set and when it was fetched. The page
-// count is not kept: a short page is what says "that was the last one", and
-// the handler works that out again from the length.
-type cachedIssues struct {
-	issues []youtrack.Issue
-	at     time.Time
-}
-
-// issueCacheTTL is deliberately short. The point is the back-and-forth between
-// a list and the issues on it, not saving a request an hour from now — the
-// list on screen must not be yesterday's board.
-const issueCacheTTL = 30 * time.Second
-
-// flashFor is how long a header confirmation stays up.
-const flashFor = 2 * time.Second
-
-// flashExpiredMsg clears a header confirmation, unless a newer one replaced it.
-type flashExpiredMsg struct{ gen int }
-
 // New builds the program. A nil cfg means there is no config file yet and the
 // program opens on the setup screen instead of failing. provider selects a
 // config entry by name; empty picks the first one.
@@ -152,6 +126,7 @@ func New(cfg *config.Config, provider, path string) (*Model, error) {
 		prompt:  newQueryPrompt(),
 		filters: newList("Filters"),
 		issues:  newList("Issues"),
+		edit:    newList("Edit field"),
 		detail:  viewport.New(),
 		spin:    spinner.New(spinner.WithSpinner(spinner.Dot)),
 		help:    help.New(),
@@ -202,54 +177,6 @@ func (m *Model) setProvider(i int) error {
 	// per-instance, so switching starts over rather than carrying state across.
 	m.watch = newWatcher(p.Watch)
 	return nil
-}
-
-// flashCmd puts a confirmation in the header and takes it away again. Only
-// for things that otherwise leave no trace: a clipboard write nobody sees is
-// indistinguishable from a key that does nothing. Errors are still dialogs.
-func (m *Model) flashCmd(text string) tea.Cmd {
-	m.flashGen++
-	m.flash = text
-	gen := m.flashGen
-	return tea.Tick(flashFor, func(time.Time) tea.Msg { return flashExpiredMsg{gen} })
-}
-
-// cacheKey is the query as it goes over the wire, ordering clause included:
-// the same filter sorted two ways is two result sets.
-func (m *Model) cacheKey(query string) string {
-	return applySort(query, sortOrders[m.sortBy])
-}
-
-// cacheIssues remembers everything currently on the issue list, pages and all,
-// so that going back to it is free for issueCacheTTL.
-func (m *Model) cacheIssues() {
-	if m.query == "" || len(m.allIssues) == 0 {
-		return
-	}
-	if m.cache == nil {
-		m.cache = make(map[string]cachedIssues)
-	}
-	// Cloned: appendNewIssues grows allIssues in place, which would otherwise
-	// reach into the entry that was just stored.
-	m.cache[m.cacheKey(m.query)] = cachedIssues{issues: slices.Clone(m.allIssues), at: time.Now()}
-}
-
-// commentsNewestFirst is the reading order of an issue's comments. It lives
-// in the config so that `S` on the detail screen is remembered, and is read
-// through here because there is no config at all on the setup screen.
-func (m *Model) commentsNewestFirst() bool {
-	return m.cfg != nil && m.cfg.CommentsNewestFirst
-}
-
-func (m *Model) insecure() bool {
-	return m.cfg != nil && m.cfg.Providers[m.provider].Insecure
-}
-
-func (m *Model) providerName() string {
-	if m.cfg == nil {
-		return "setup"
-	}
-	return m.cfg.Providers[m.provider].Name
 }
 
 // Init implements tea.Model.
@@ -344,6 +271,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case editableMsg:
+		if msg.gen != m.gen {
+			return m, nil
+		}
+		m.loading = false
+		if len(msg.fields) == 0 {
+			// Text, date, period and multi-value fields are not offered, so
+			// an issue built only from those has nothing to pick from.
+			m.dlg = infoDialog("Nothing to edit here",
+				"This issue has no single-value field backed by a list of allowed values.")
+			return m, nil
+		}
+		m.editFields = msg.fields
+		return m, m.showEditFields()
+
+	case editedMsg:
+		if msg.gen != m.gen {
+			return m, nil
+		}
+		m.loading = false
+		m.screen = screenDetail
+		// A workflow runs on the far side and may have moved more than the one
+		// field, so the issue is read back rather than patched here — and the
+		// cached list goes with it.
+		clear(m.cache)
+		return m, tea.Batch(m.flashCmd(msg.field+" → "+msg.value), m.loadDetail(msg.id))
+
 	case detailMsg:
 		if msg.gen != m.gen {
 			return m, nil
@@ -354,6 +308,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			slices.Reverse(msg.comments)
 		}
 		m.current, m.comments = msg.issue, msg.comments
+		// The row behind the issue must not keep showing what a field said
+		// before `e` changed it.
+		m.syncIssueInList(*msg.issue)
 		m.renderDetail()
 		m.detail.GotoTop()
 		// Reading it is what makes it no longer new.
@@ -428,7 +385,8 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// While the list's own filter input is open every key belongs to it.
 	if (m.screen == screenFilters && m.filters.SettingFilter()) ||
-		(m.screen == screenIssues && m.issues.SettingFilter()) {
+		(m.screen == screenIssues && m.issues.SettingFilter()) ||
+		(m.editing() && m.edit.SettingFilter()) {
 		return m, m.forward(msg)
 	}
 
@@ -437,7 +395,10 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Help):
-		m.help.ShowAll = !m.help.ShowAll
+		// A popup rather than a taller footer: the full list is two dozen
+		// bindings, and growing the chrome pushes the thing being read off
+		// the top of the screen.
+		m.dlg = helpDialog(m.help, screenKeys{m.keys, m.screen})
 		return m, nil
 
 	case key.Matches(msg, m.keys.Provider):
@@ -531,6 +492,14 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tea.SetClipboard(m.client.IssueURL(id)),
 			m.flashCmd(id+" URL copied"))
 
+	case key.Matches(msg, m.keys.Edit):
+		// The only key in the program that can change anything on the
+		// instance, and it only offers what the instance says is writable.
+		if m.screen != screenDetail || m.current == nil {
+			return m, nil
+		}
+		return m, m.loadEditable(m.current.ID)
+
 	case m.screen == screenDetail && key.Matches(msg, m.keys.Comments):
 		m.detail.SetYOffset(m.commentsLine)
 		return m, nil
@@ -547,7 +516,8 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// An applied filter owns esc: clearing it has to come before leaving
 		// the screen, or there is no way back to the full list.
 		if (m.screen == screenIssues && m.issues.IsFiltered()) ||
-			(m.screen == screenFilters && m.filters.IsFiltered()) {
+			(m.screen == screenFilters && m.filters.IsFiltered()) ||
+			(m.editing() && m.edit.IsFiltered()) {
 			return m, m.forward(msg)
 		}
 		switch m.screen {
@@ -555,6 +525,12 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenIssues
 		case screenIssues:
 			m.screen = screenFilters
+		case screenEditField:
+			m.screen = screenDetail
+		case screenEditValue:
+			// Back to the field list, not out of the editor: picking the
+			// wrong field is the mistake this undoes.
+			return m, m.showEditFields()
 		}
 		return m, nil
 
@@ -569,6 +545,12 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if it, ok := m.issues.SelectedItem().(issueItem); ok {
 				return m, m.loadDetail(it.issue.ID)
 			}
+		case screenEditField:
+			if it, ok := m.edit.SelectedItem().(editFieldItem); ok {
+				return m, m.showEditValues(it.i)
+			}
+		case screenEditValue:
+			return m, m.chooseEditValue()
 		}
 		return m, nil
 	}
@@ -612,7 +594,9 @@ func (m *Model) dialogKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.dlg = nil
 		return m, m.trustAnyway()
-	case "esc", "enter", "q":
+	case "esc", "enter", "q", "?":
+		// `?` closes the help popup it opened, the way it used to untoggle
+		// the full footer.
 		m.dlg = nil
 		return m, nil
 	}
@@ -633,211 +617,6 @@ func (m *Model) trustAnyway() tea.Cmd {
 	// Persist the downgrade so the next run does not ask again.
 	m.savePending = true
 	return m.reload()
-}
-
-// setFilterItems rebuilds the filters list, favourites first. Both lists are
-// sorted stably: favourites keep the order they were pinned in, everything
-// else keeps the order YouTrack returned.
-func (m *Model) setFilterItems() tea.Cmd {
-	fav := m.cfg.Providers[m.provider].Favorites
-	rank := func(id string) int {
-		if i := slices.Index(fav, id); i >= 0 {
-			return i
-		}
-		return len(fav)
-	}
-
-	sorted := slices.Clone(m.savedQueries)
-	slices.SortStableFunc(sorted, func(a, b youtrack.SavedQuery) int {
-		return rank(a.ID) - rank(b.ID)
-	})
-
-	items := make([]list.Item, 0, len(sorted))
-	for _, q := range sorted {
-		items = append(items, filterItem{
-			SavedQuery: q,
-			fav:        rank(q.ID) < len(fav),
-			watched:    m.watch.watching[q.ID],
-		})
-	}
-	return m.filters.SetItems(items)
-}
-
-// migrateFavorites rewrites favourites recorded as names — the original format
-// — into IDs, so that renaming a saved search in YouTrack stops losing its pin.
-// Memory only: the next `f` persists the result, and an entry that matches
-// nothing is left alone rather than dropped.
-func (m *Model) migrateFavorites() {
-	p := &m.cfg.Providers[m.provider]
-	ids := make(map[string]bool, len(m.savedQueries))
-	byName := make(map[string]string, len(m.savedQueries))
-	for _, q := range m.savedQueries {
-		ids[q.ID] = true
-		byName[q.Name] = q.ID
-	}
-	for i, f := range p.Favorites {
-		if ids[f] {
-			continue
-		}
-		if id, ok := byName[f]; ok {
-			p.Favorites[i] = id
-		}
-	}
-}
-
-// appendNewIssues adds a page, skipping anything already on the list. Paging is
-// by offset, so an issue added to the filter between two requests shifts the
-// window and makes the next page overlap the previous one.
-func appendNewIssues(have, page []youtrack.Issue) []youtrack.Issue {
-	seen := make(map[string]bool, len(have))
-	for _, iss := range have {
-		seen[iss.ID] = true
-	}
-	for _, iss := range page {
-		if !seen[iss.ID] {
-			have = append(have, iss)
-		}
-	}
-	return have
-}
-
-// setIssueItems rebuilds the issue list from every page fetched so far.
-func (m *Model) setIssueItems() tea.Cmd {
-	p := m.cfg.Providers[m.provider]
-	marked := make(map[string]bool, len(p.Marked))
-	for _, id := range p.Marked {
-		marked[id] = true
-	}
-	items := make([]list.Item, 0, len(m.allIssues))
-	for _, iss := range m.allIssues {
-		items = append(items, issueItem{
-			issue:  iss,
-			fields: p.ListFields,
-			isNew:  m.watch.isFresh(iss.ID),
-			marked: marked[iss.ID],
-		})
-	}
-	return m.issues.SetItems(items)
-}
-
-// isMarked reports whether an issue carries the user's tick.
-func (m *Model) isMarked(id string) bool {
-	return m.cfg != nil && slices.Contains(m.cfg.Providers[m.provider].Marked, id)
-}
-
-// toggleMark ticks the selected issue off, or takes the tick back. It records
-// IDs in the config next to `favorites` and `watch`, so a list worked through
-// over a day survives closing the program — which is the only reason to tick
-// anything off in the first place.
-//
-// The app assigns no meaning to it: reviewed, read, answered, deal with it
-// tomorrow. Whoever presses `x` knows what they meant.
-func (m *Model) toggleMark() tea.Cmd {
-	id := m.selectedIssueID()
-	if id == "" {
-		return nil
-	}
-	p := &m.cfg.Providers[m.provider]
-	if i := slices.Index(p.Marked, id); i >= 0 {
-		p.Marked = slices.Delete(p.Marked, i, i+1)
-	} else {
-		p.Marked = append(p.Marked, id)
-	}
-	if err := m.saveConfig(); err != nil {
-		m.dlg = infoDialog("Config not saved", err.Error())
-	}
-	// The list picks up the glyph; the Marked filter picks up the ID. On the
-	// detail screen the header is what says it, since neither is on show.
-	return tea.Batch(m.refreshIssueMarks(), m.refreshMarkedFilter())
-}
-
-// refreshMarkedFilter keeps the synthetic "Marked" filter in step with what is
-// ticked, and drops it once nothing is. Without a way back to them, marks
-// accumulate in a config nobody can review: the filters they were found under
-// change, and an ID alone says nothing about where it came from.
-//
-// ponytail: the whole list travels as one `issue id:` query, so a few hundred
-// marks make a URL long enough for a server to refuse. Upgrade: page the IDs,
-// or keep only the newest N.
-func (m *Model) refreshMarkedFilter() tea.Cmd {
-	m.savedQueries = slices.DeleteFunc(m.savedQueries, func(q youtrack.SavedQuery) bool {
-		return q.ID == markedFilterID
-	})
-	if ids := m.cfg.Providers[m.provider].Marked; len(ids) > 0 {
-		at := min(len(builtinFilters), len(m.savedQueries))
-		m.savedQueries = slices.Insert(m.savedQueries, at, youtrack.SavedQuery{
-			ID:    markedFilterID,
-			Name:  "Marked",
-			Query: "issue id: " + strings.Join(ids, ", "),
-		})
-	}
-	return m.setFilterItems()
-}
-
-// refreshIssueMarks redraws the list so a newly arrived issue picks up its
-// marker, without disturbing where the user is.
-func (m *Model) refreshIssueMarks() tea.Cmd {
-	if len(m.allIssues) == 0 {
-		return nil
-	}
-	at := m.issues.Index()
-	cmd := m.setIssueItems()
-	m.issues.Select(at)
-	return cmd
-}
-
-// toggleFavorite pins or unpins the selected filter and persists it. Matching
-// is by ID, so renaming a saved search in YouTrack keeps its pin and two
-// searches sharing a name stay independent.
-func (m *Model) toggleFavorite() tea.Cmd {
-	it, ok := m.filters.SelectedItem().(filterItem)
-	if !ok {
-		return nil
-	}
-	p := &m.cfg.Providers[m.provider]
-	if i := slices.Index(p.Favorites, it.ID); i >= 0 {
-		p.Favorites = slices.Delete(p.Favorites, i, i+1)
-	} else {
-		p.Favorites = append(p.Favorites, it.ID)
-	}
-	if err := m.saveConfig(); err != nil {
-		m.dlg = infoDialog("Config not saved", err.Error())
-	}
-
-	cmd := m.setFilterItems()
-	// Follow the item to its new position instead of resetting to the top:
-	// pinning moves it, the cursor should go with it.
-	//
-	// Only while unfiltered. Items() is the unfiltered order but Select indexes
-	// the visible one, so following a filtered list lands the cursor on some
-	// other row — and the next `f` then pins the wrong filter. With a filter
-	// applied the visible order is the fuzzy ranking, which pinning does not
-	// touch, so the cursor is already where it belongs.
-	if !m.filters.IsFiltered() {
-		for i, li := range m.filters.Items() {
-			if f, ok := li.(filterItem); ok && f.ID == it.ID {
-				m.filters.Select(i)
-				break
-			}
-		}
-	}
-	return cmd
-}
-
-// selectedIssueID is the issue the user is looking at, from either the list or
-// the detail view. Empty on the screens that have none.
-func (m *Model) selectedIssueID() string {
-	switch m.screen {
-	case screenIssues:
-		if it, ok := m.issues.SelectedItem().(issueItem); ok {
-			return it.issue.ID
-		}
-	case screenDetail:
-		if m.current != nil {
-			return m.current.ID
-		}
-	}
-	return ""
 }
 
 // reload re-runs whatever the current screen is showing.
@@ -880,6 +659,8 @@ func (m *Model) forward(msg tea.Msg) tea.Cmd {
 		m.issues, cmd = m.issues.Update(msg)
 	case screenDetail:
 		m.detail, cmd = m.detail.Update(msg)
+	case screenEditField, screenEditValue:
+		m.edit, cmd = m.edit.Update(msg)
 	}
 	return cmd
 }
@@ -894,6 +675,7 @@ func (m *Model) layout() {
 	m.prompt.setWidth(m.w)
 	m.filters.SetSize(m.w, body)
 	m.issues.SetSize(m.w, body)
+	m.edit.SetSize(m.w, body)
 	m.detail.SetWidth(m.w)
 	m.detail.SetHeight(body)
 }
@@ -938,6 +720,8 @@ func (m *Model) View() tea.View {
 		body = m.issues.View()
 	case screenDetail:
 		body = m.detail.View()
+	case screenEditField, screenEditValue:
+		body = m.edit.View()
 	}
 
 	rows := []string{m.header()}
@@ -956,89 +740,4 @@ func (m *Model) View() tea.View {
 	// Ctrl+Click from the terminal and break every OSC 8 link we emit.
 	v.AltScreen = true
 	return v
-}
-
-func (m *Model) header() string {
-	left := styTitle.Render(" youtrack-tui ") + styProvider.Render(" "+m.providerName()+" ")
-	if m.insecure() {
-		// A downgraded connection stays on screen for as long as it is on.
-		left += styInsecure.Render(" !insecure ")
-	}
-	if n := len(m.watch.watching); n > 0 {
-		// The glyph alone does not say what it counts, and this is the only
-		// place the ◉ in the filters gutter gets explained.
-		style, label := styWatch, fmt.Sprintf("◉ watching %d", n)
-		if m.watch.failed {
-			// A background poll cannot raise a modal, so it says so here.
-			style, label = styWatchFail, fmt.Sprintf("◉ watching %d (failed)", n)
-		}
-		left += " " + style.Render(label)
-	}
-
-	if clause := sortOrders[m.sortBy]; clause != "" {
-		// Exactly what was appended to the query, not a prettier name for it:
-		// the same string works when typed into the `s` prompt.
-		left += " " + styDim.Render("sort by: "+clause)
-	}
-
-	if m.screen == screenDetail && m.current != nil && m.isMarked(m.current.ID) {
-		// The list glyph is two screens away; without this `x` on an open
-		// issue looks like a key that does nothing.
-		left += " " + styMark.Render("✓ marked")
-	}
-
-	if m.screen == screenDetail && m.commentsNewestFirst() {
-		// Written to the config, so it stays on until it is turned off —
-		// worth a word on screen, like the sort clause above.
-		left += " " + styDim.Render("comments: newest first")
-	}
-
-	if m.flash != "" {
-		left += " " + styWatch.Render(m.flash)
-	}
-
-	if m.newVersion != "" {
-		// Ambient, like the watch counter: it says a newer release exists and
-		// names the command that installs it, and nothing about it interrupts.
-		left += " " + styUpdate.Render("↑ "+m.newVersion+" — run `youtrack-tui update`")
-	}
-
-	var right string
-	switch {
-	case m.loading:
-		right = m.spin.View() + " loading…"
-	case m.screen == screenSetup:
-		right = styDim.Render("first run")
-	case m.screen == screenDetail && m.current != nil:
-		right = styDim.Render(m.current.ID)
-	case m.query != "":
-		right = styDim.Render(m.query)
-		if m.queryName != "" {
-			right = styValue.Render(m.queryName) + "  " + right
-		}
-	default:
-		right = styDim.Render("pick a filter")
-	}
-
-	// The name pushed an already long clause further right; without this the
-	// row overflows and lipgloss wraps it under the title.
-	if avail := m.w - lipgloss.Width(left) - 1; avail > 0 && lipgloss.Width(right) > avail {
-		right = ansi.Truncate(right, avail, "…")
-	}
-
-	gap := max(1, m.w-lipgloss.Width(left)-lipgloss.Width(right))
-	return left + strings.Repeat(" ", gap) + right + "\n" +
-		styRule.Render(strings.Repeat("─", m.w))
-}
-
-func (m *Model) footer() string {
-	if m.dlg != nil {
-		// The dialog carries its own keys; repeating them down here just
-		// leaves the hint peeking out beside the box.
-		return ""
-	}
-	if m.prompt.active {
-		return styDim.Render("enter  run the query  ·  esc  cancel")
-	}
-	return m.help.View(screenKeys{m.keys, m.screen})
 }

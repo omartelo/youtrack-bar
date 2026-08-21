@@ -13,17 +13,21 @@ type keyMap struct {
 	Favorite key.Binding
 	Watch    key.Binding
 	Mark     key.Binding
+	Edit     key.Binding
 	Browser  key.Binding
 	Copy     key.Binding
 	More     key.Binding
 	Scroll   key.Binding
 
-	// Detail screen only.
-	Comments key.Binding
-	Top      key.Binding
-	Bottom   key.Binding
-	Help     key.Binding
-	Quit     key.Binding
+	// Detail screen only. CommentOrder shares its key with Sort — same handler,
+	// but on an open issue `S` flips the comments, which "sort order" does not
+	// describe.
+	CommentOrder key.Binding
+	Comments     key.Binding
+	Top          key.Binding
+	Bottom       key.Binding
+	Help         key.Binding
+	Quit         key.Binding
 
 	// Setup screen only.
 	Field  key.Binding
@@ -49,14 +53,18 @@ func defaultKeys() keyMap {
 		Watch:    key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "watch/unwatch")),
 		// What the mark means is the user's business — reviewed, read, come
 		// back later — so the help says what it does, not what it is for.
-		Mark:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark/unmark")),
+		Mark: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark/unmark")),
+		// The one key that writes. It says "field" rather than "issue" because
+		// that is the whole of it: no comment, no summary, no description.
+		Edit:    key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit a field")),
 		Browser: key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in YouTrack")),
 		// OSC 52 rather than a clipboard tool: it goes through the terminal,
 		// which is the one thing that still works over SSH.
-		Copy:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy URL")),
-		Comments: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "jump to comments")),
-		Top:      key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
-		Bottom:   key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
+		Copy:         key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy URL")),
+		CommentOrder: key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "comment order")),
+		Comments:     key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "jump to comments")),
+		Top:          key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
+		Bottom:       key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
 		// Disabled until a full page comes back, which also hides it from help.
 		More:   key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "load more"), key.WithDisabled()),
 		Scroll: key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll")),
@@ -73,32 +81,51 @@ type screenKeys struct {
 }
 
 func (s screenKeys) ShortHelp() []key.Binding {
+	// Four or five keys, no more: the way in, the way out, the one thing this
+	// screen is for, and `?` for everything else. A footer nobody can read at
+	// a glance is a footer nobody reads.
 	switch s.s {
 	case screenSetup:
 		return []key.Binding{s.k.Field, s.k.Save, s.k.Reveal, s.k.Abort}
+	case screenEditField, screenEditValue:
+		return []key.Binding{s.k.Open, s.k.Back, s.k.Help}
 	case screenDetail:
-		return []key.Binding{s.k.Scroll, s.k.Comments, s.k.Browser, s.k.Copy, s.k.Mark, s.k.Sort, s.k.Back, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Scroll, s.k.Edit, s.k.Back, s.k.Help, s.k.Quit}
 	case screenIssues:
-		return []key.Binding{s.k.Open, s.k.Browser, s.k.Copy, s.k.Mark, s.k.More, s.k.Search, s.k.Sort, s.k.Filter, s.k.Back, s.k.Reload, s.k.Help, s.k.Quit}
+		// More disables itself until a full page comes back, so it only takes
+		// a slot here while there is another page to take.
+		return []key.Binding{s.k.Open, s.k.More, s.k.Back, s.k.Help, s.k.Quit}
 	default:
-		return []key.Binding{s.k.Open, s.k.Favorite, s.k.Watch, s.k.Search, s.k.Sort, s.k.Filter, s.k.Reload, s.k.Help, s.k.Quit}
+		return []key.Binding{s.k.Open, s.k.Filter, s.k.Help, s.k.Quit}
 	}
 }
 
 func (s screenKeys) FullHelp() [][]key.Binding {
-	if s.s == screenSetup {
+	// The popup is the reference now, so a screen only lists what it actually
+	// answers to: `f` and `w` do nothing on the issue list, `o`, `y` and `x`
+	// do nothing on the filters.
+	switch s.s {
+	case screenSetup:
 		return [][]key.Binding{{s.k.Field, s.k.Save}, {s.k.Reveal, s.k.Abort}}
-	}
-	if s.s == screenDetail {
+	case screenEditField, screenEditValue:
+		return [][]key.Binding{{s.k.Open, s.k.Scroll}, {s.k.Filter, s.k.Back, s.k.Quit}}
+	case screenDetail:
 		return [][]key.Binding{
 			{s.k.Scroll, s.k.Top, s.k.Bottom, s.k.Comments},
-			{s.k.Browser, s.k.Copy, s.k.Mark, s.k.Sort, s.k.Back, s.k.Reload},
+			{s.k.Browser, s.k.Copy, s.k.Mark, s.k.Edit, s.k.CommentOrder, s.k.Back, s.k.Reload},
 			{s.k.Help, s.k.Quit},
 		}
-	}
-	return [][]key.Binding{
-		{s.k.Open, s.k.Browser, s.k.Copy, s.k.Back, s.k.Scroll},
-		{s.k.Search, s.k.Sort, s.k.Filter, s.k.Favorite, s.k.Watch, s.k.Mark, s.k.More, s.k.Reload, s.k.Provider},
-		{s.k.Help, s.k.Quit},
+	case screenIssues:
+		return [][]key.Binding{
+			{s.k.Open, s.k.Scroll, s.k.Filter, s.k.More},
+			{s.k.Browser, s.k.Copy, s.k.Mark, s.k.Search, s.k.Sort},
+			{s.k.Back, s.k.Reload, s.k.Provider, s.k.Help, s.k.Quit},
+		}
+	default:
+		return [][]key.Binding{
+			{s.k.Open, s.k.Scroll, s.k.Filter},
+			{s.k.Search, s.k.Sort, s.k.Favorite, s.k.Watch},
+			{s.k.Reload, s.k.Provider, s.k.Help, s.k.Quit},
+		}
 	}
 }
