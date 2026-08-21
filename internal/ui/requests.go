@@ -106,3 +106,43 @@ func (m *Model) loadDetail(id string) tea.Cmd {
 		return detailMsg{gen, issue, comments}
 	}
 }
+
+// editableMsg carries the fields of an issue the instance says can be set from
+// a list, and what the legal values are.
+type editableMsg struct {
+	gen    int
+	fields []youtrack.Editable
+}
+
+// editedMsg is the one message in the program that means something changed on
+// the other side.
+type editedMsg struct {
+	gen   int
+	id    string
+	field string
+	value string
+}
+
+func (m *Model) loadEditable(id string) tea.Cmd {
+	c, gen := m.begin()
+	return func() tea.Msg {
+		fields, err := c.EditableFields(context.Background(), id)
+		if err != nil {
+			return errMsg{gen, err}
+		}
+		return editableMsg{gen, fields}
+	}
+}
+
+// applyEdit is the only request in the program that writes anything. It sends
+// one field and reports what it sent, because the answer worth showing is the
+// issue read back afterwards, not the response body.
+func (m *Model) applyEdit(id string, f youtrack.Editable, value string) tea.Cmd {
+	c, gen := m.begin()
+	return func() tea.Msg {
+		if err := c.SetField(context.Background(), id, f, value); err != nil {
+			return errMsg{gen, err}
+		}
+		return editedMsg{gen, id, f.Name, value}
+	}
+}

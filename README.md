@@ -1,13 +1,16 @@
 # youtrack-tui
 
-A read-only terminal UI for browsing YouTrack issues. Built with
+A read-mostly terminal UI for browsing YouTrack issues. Built with
 [Bubble Tea v2](https://charm.land/bubbletea/v2).
 
 Pick a saved filter, list issues, open one, read its body, comments and every
 custom field the instance defines. Attachments and issue links are OSC 8
 hyperlinks — **Ctrl+Click** opens them in your browser.
 
-Nothing is ever written back to YouTrack.
+The only thing written back is a single custom field: `e` on an open issue
+picks a field and one of the values the instance itself offers, so finishing a
+review does not mean opening YouTrack to move the card. Comments, summaries
+and descriptions stay read-only.
 
 ## Install
 
@@ -199,16 +202,26 @@ task cover                    # coverage summary
 | `f`      | pin/unpin the selected filter (favourite) |
 | `w`      | watch/unwatch the selected filter         |
 | `x`      | mark/unmark the selected issue            |
+| `e`      | open issue: set one custom field          |
 | `/`      | fuzzy-search the current list             |
 | `r`      | reload the current screen                 |
 | `p`      | switch to the next provider               |
-| `?`      | toggle full help                          |
+| `?`      | the full key list, in a popup             |
 | `q`      | quit                                      |
 
 On the setup screen: `tab` next field, `enter` verify and save, `ctrl+r`
 reveal the token, `ctrl+c` quit. Paste the token with your terminal's usual
 shortcut (`ctrl+shift+v`, middle-click, `cmd+v`); `ctrl+v` reads the system
 clipboard directly.
+
+`e` is the write. It asks the instance which fields of that issue take a value
+from a closed list — state, priority, assignee, whatever the project calls
+them — then offers those values and nothing else. The list is shorter than the
+card on purpose: fields with no list of legal answers (durations, dates, free
+text) and fields that hold several values at once (Sprint, usually) are left to
+YouTrack's own UI. It needs a token with write permission; a read-only one
+comes back with a permission error. Picking the value already there sends no
+request.
 
 `s` and `/` are different things: `s` asks YouTrack a new question, `/` narrows
 what is already on screen. `S` cycles `sort by:` — filter's own order (YouTrack
@@ -240,7 +253,3 @@ next one does not fetch it again. `r` ignores that and asks the instance.
 still go through Ctrl+Click: mouse tracking is deliberately disabled so the
 terminal keeps handling OSC 8 hyperlinks. See `CLAUDE.md` for the full
 invariants and the list of known ceilings.
-
-## Screens
-
-See [docs/tui-mockup.md](docs/tui-mockup.md).

@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/lipgloss/v2"
 
 	"github.com/omartelo/youtrack-tui/internal/youtrack"
@@ -14,6 +15,10 @@ type dialog struct {
 	title string
 	body  string
 	hint  string
+	// wide lifts the prose width cap. The help popup is a table of key and
+	// description columns, and a table re-wrapped to 68 columns stops being
+	// one; a paragraph of error text at terminal width stops being readable.
+	wide bool
 	// offerTrust marks the one dialog with an action attached: a certificate
 	// the machine does not trust, which the user can choose to accept.
 	offerTrust bool
@@ -21,6 +26,18 @@ type dialog struct {
 
 func infoDialog(title, body string) *dialog {
 	return &dialog{title: title, body: body, hint: "esc  dismiss"}
+}
+
+// helpDialog is what `?` opens: every binding the current screen answers to,
+// in the modal rather than crammed into the footer. The footer names the four
+// keys worth having on screen permanently; this is the rest of them.
+func helpDialog(h help.Model, k help.KeyMap) *dialog {
+	return &dialog{
+		title: "Keys",
+		body:  h.FullHelpView(k.FullHelp()),
+		hint:  "?  or  esc   close",
+		wide:  true,
+	}
 }
 
 func errorDialog(err error) *dialog {
@@ -40,17 +57,43 @@ func errorDialog(err error) *dialog {
 }
 
 func (d *dialog) view(termWidth int) string {
-	// Each block is wrapped and padded to the same width before the box wraps
-	// it: letting the border style re-wrap already-rendered text shreds it.
-	w := max(24, min(68, termWidth-10))
-	blank := styDialogBody.Width(w).Render("")
-	return styDialogBox.Render(strings.Join([]string{
-		styDialogTitle.Width(w).Render(d.title),
-		blank,
-		styDialogBody.Width(w).Render(d.body),
-		blank,
-		styDialogHint.Width(w).Render(d.hint),
-	}, "\n"))
+	inner := max(24, min(68, termWidth-10))
+	if d.wide {
+		// Wide enough for the columns as rendered, never wider than the term.
+		inner = max(24, min(lipgloss.Width(d.body), termWidth-10))
+	}
+	body := styDialogBody.Width(inner).Render(d.body)
+	return titledBox(d.title, body+"\n\n"+styDialogHint.Render(d.hint), inner)
+}
+
+// titledBox draws a rounded border with the title cut into the top edge, the
+// way lazydocker does it — ported from omartelo/lazyovpn.
+//
+// Nothing is painted behind the content: each line is padded to innerW, which
+// is what covers the screen underneath. A background style would have to be
+// re-asserted on every line, because any styled run nested inside it emits an
+// SGR reset that clears the background for the rest of that row.
+func titledBox(title, content string, innerW int) string {
+	span := innerW + 2 // between the corners: one space of padding each side
+
+	label := " " + title + " "
+	fill := span - 1 - lipgloss.Width(label) // -1 for the leading dash
+	top := styDialogBorder.Render("╭" + strings.Repeat("─", span) + "╮")
+	if fill >= 0 {
+		top = styDialogBorder.Render("╭─") + styDialogTitle.Render(label) +
+			styDialogBorder.Render(strings.Repeat("─", fill)+"╮")
+	}
+
+	side := styDialogBorder.Render("│")
+	cell := lipgloss.NewStyle().Width(innerW)
+
+	var b strings.Builder
+	b.WriteString(top + "\n")
+	for _, ln := range strings.Split(content, "\n") {
+		b.WriteString(side + " " + cell.Render(ln) + " " + side + "\n")
+	}
+	b.WriteString(styDialogBorder.Render("╰" + strings.Repeat("─", span) + "╯"))
+	return b.String()
 }
 
 // overlay draws the dialog centred on top of the rendered screen, so the
