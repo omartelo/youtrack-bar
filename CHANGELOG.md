@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-20
+
+### Added
+
+- `e` on an open issue sets one of its custom fields. It asks the instance
+  which fields take a value from a closed list, offers exactly those values,
+  and writes one — so finishing a review no longer means opening YouTrack to
+  move the card. The issue is read back afterwards rather than patched in
+  memory, because a workflow on the far side may have moved more than the
+  field that was sent, and choosing the value already there sends nothing.
+- The write surface is one field wide and stays that way.
+  `internal/youtrack/write.go` holds the only non-GET request in the program;
+  the rest of the client is still GET only. Bundle-backed fields are addressed
+  by name and user fields by login, since two people can share a full name.
+  Multi-value fields, periods, dates and free text have no closed set of
+  answers and are left to YouTrack's own UI.
+- `e` needs a token with write permission. The token that reads is the token
+  that writes; there is no read-only mode short of removing the permission in
+  YouTrack.
+
+### Changed
+
+- The footer names at most five keys per screen — the way in, the way out, the
+  one thing the screen is for, and `?`. `?` now opens the full key list in a
+  popup instead of growing the footer, and that list is per screen, so the
+  filters list stops offering `o`, `y` and `x`, which need an issue, and the
+  issue list stops offering `f` and `w`, which are filters-only.
+- The modal box draws its title in the top border and paints no background
+  behind its content, which is what let the help columns render inside it
+  without tearing the box apart.
+- An open issue has a blank line between its summary and the line that dates
+  it, so a long summary stops running into the metadata.
+
+### Removed
+
+- `docs/tui-mockup.md`.
+
 ## [0.6.0] - 2026-08-19
 
 ### Added
@@ -123,7 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AUR package.
 - GitHub CI with tests, race detection, golangci-lint, and release packaging.
 
-[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/omartelo/youtrack-tui/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/omartelo/youtrack-tui/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/omartelo/youtrack-tui/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/omartelo/youtrack-tui/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/omartelo/youtrack-tui/compare/v0.4.0...v0.5.0
